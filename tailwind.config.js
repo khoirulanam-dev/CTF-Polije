@@ -8,7 +8,7 @@ module.exports = {
       colors: {
         primary: {
           50: "#eff6ff",
-          500: "#10B981", // emerald-500 (primary green)
+          500: "#10B981",
           600: "#059669", // emerald-600 (hover)
           700: "#047857",
           DEFAULT: "hsl(var(--primary))",
