@@ -12,10 +12,11 @@ export const APP = {
     'Forensics',
     'Web',
     'Reverse',
+    'Network',
   ],
   links: {
     github: 'https://github.com/Anam1602',
-    discord: 'https://discord.com/invite/A5rgMZBHPr',
+    discord: 'https://discord.gg/bbVU2Ab2',
     nextjs: 'https://nextjs.org/',
     tailwind: 'https://tailwindcss.com/',
     framer: 'https://www.framer.com/motion/',
