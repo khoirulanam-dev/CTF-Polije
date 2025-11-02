@@ -79,18 +79,18 @@ export async function getChallenges(
  */
 export async function submitFlag(challengeId: string, flag: string) {
   const { data, error } = await supabase.rpc('submit_flag', {
-    // p_user_id: userId,
-    challenge_id: challengeId,
-    flag: flag,
+    challenge_id: challengeId,   // ⬅️ ganti nama
+    flag: flag,                  // ⬅️ ganti nama
   });
 
   if (error) {
-    console.error('RPC error:', error);
-    return { success: false, message: 'Failed to submit flag' };
+    console.error('submit_flag error', error);
+    return { success: false, message: error.message };
   }
 
   return data;
 }
+
 
 /**
  * Add a new challenge (Admin only)
