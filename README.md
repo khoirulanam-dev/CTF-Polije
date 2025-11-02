@@ -33,8 +33,8 @@
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/ariafatah0711/ctfs
-cd ctfs
+git clone https://github.com/khoirulanam-dev/CTF-Polije/
+cd CTF-Polije
 ```
 
 ### 2. Supabase Setup
