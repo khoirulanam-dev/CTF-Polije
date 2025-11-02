@@ -80,8 +80,8 @@ export async function getChallenges(
 export async function submitFlag(challengeId: string, flag: string) {
   const { data, error } = await supabase.rpc('submit_flag', {
     // p_user_id: userId,
-    p_challenge_id: challengeId,
-    p_flag: flag,
+    challenge_id: challengeId,
+    flag: flag,
   });
 
   if (error) {
