@@ -51,17 +51,23 @@ function getUserBadges(
       color: "bg-yellow-400 text-yellow-900 border-yellow-500",
       icon: "🥇",
     });
-  } else if (rank && rank <= 3) {
+  } else if (rank && rank <= 2) {
     badges.push({
       label: "Top 2",
       color: "bg-yellow-300 text-yellow-900 border-yellow-400",
       icon: "🥈",
     });
-  } else if (rank && rank <= 10) {
+  } else if (rank && rank <= 3) {
     badges.push({
       label: "Top 3",
-      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      color: "bg-yellow-300 text-yellow-900 border-yellow-400",
       icon: "🥉",
+    });
+  } else if (rank && rank <= 10) {
+    badges.push({
+      label: "Top 10",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
     });
   } else if (rank && rank <= 25) {
     badges.push({
