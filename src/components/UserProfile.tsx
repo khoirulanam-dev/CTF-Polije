@@ -328,7 +328,7 @@ export default function UserProfile({
                               👑
                             </span>
                             <span className="truncate max-w-[100px]">
-                              Pernah Top {userDetail.highest_rank}
+                              Highest Rank {userDetail.highest_rank}
                             </span>
                           </span>
                         )}
