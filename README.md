@@ -67,10 +67,10 @@ The application can be customized through `src/config.ts`:
 
 ```typescript
 export const APP = {
-  shortName: 'FGTE',              // Short name for your CTF platform
+  shortName: 'POLIJE CTF',              // Short name for your CTF platform
   fullName: 'CTFS Platform',      // Full name of your platform
   description: 'Your description', // Platform description
-  flagFormat: 'FGTE{your_flag_here}', // Flag format for challenges
+  flagFormat: 'POLIJE{your_flag_here}', // Flag format for challenges
   challengeCategories: [          // Available challenge categories
     'Intro',
     'Misc',
@@ -79,6 +79,7 @@ export const APP = {
     'Forensics',
     'Web',
     'Reverse',
+    'Network',
   ],
   links: {                        // Platform-related links
     github: 'your_github_repo',
@@ -96,7 +97,7 @@ Create a `.env.local` file at the project root:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-NEXT_PUBLIC_SITE_URL=https://ctf.ariaf.my.id
+NEXT_PUBLIC_SITE_URL=https://ctf-polije.vercel.app/
 ```
 
 Get these values from your Supabase project dashboard.
@@ -181,7 +182,7 @@ vercel --prod
    Set this to your domain, for example:
 
    ```
-   https://ctf.ariaf.my.id
+   https://ctf-polije.vercel.app/
    ```
 
    ![Site URL](images/README/image-2.png)
