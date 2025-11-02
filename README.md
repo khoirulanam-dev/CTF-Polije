@@ -7,7 +7,7 @@
 
 ## 🎬 Quick Demo
 
-[https://ctf.ariaf.my.id](https://ctf.ariaf.my.id)
+[https://ctf-polije.vercel.app/](https://ctf-polije.vercel.app/)
 
 ### Page Screenshot
 <!-- ![Root Page](images/README/image-18.png) -->
