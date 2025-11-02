@@ -1,3 +1,5 @@
+// src/lib/users.ts
+
 // Get user detail (rank, solved challenges) via RPC
 import { PostgrestSingleResponse } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -10,21 +12,34 @@ export type UserDetail = {
   score: number
   picture?: string | null
   solved_challenges: ChallengeWithSolve[]
+  highest_rank?: number | null
+  highest_rank_at?: string | null
 }
 
+// ambil detail user via RPC `detail_user` (yang tadi sudah kita update di supabase)
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
   try {
-    const { data, error }: PostgrestSingleResponse<any> = await supabase.rpc('detail_user', { p_id: userId })
+    const { data, error }: PostgrestSingleResponse<any> = await supabase.rpc(
+      'detail_user',
+      { p_id: userId }
+    )
+
     if (error || !data || !data.success) {
       console.error('Error fetching user detail:', error || data?.message)
       return null
     }
+
+    const u = data.user
+
     return {
-      id: data.user.id,
-      username: data.user.username,
-      rank: data.user.rank ?? null,
-      score: data.user.score ?? 0,
-      picture: data.user.picture ?? null,
+      id: u.id,
+      username: u.username,
+      rank: u.rank ?? null,
+      score: u.score ?? 0,
+      picture: u.picture ?? null,
+      // ⬇️ ikutkan dari RPC
+      highest_rank: u.highest_rank ?? null,
+      highest_rank_at: u.highest_rank_at ?? null,
       solved_challenges: (data.solved_challenges || []).map((c: any) => ({
         id: c.challenge_id,
         title: c.title,
@@ -41,11 +56,14 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   }
 }
 
+// ini dipakai halaman /user/[username]
+// kita sekalian ambil kolom peak-nya juga
 export async function getUserByUsername(username: string): Promise<User | null> {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      // ambil field yg kita butuhkan aja, termasuk yg baru
+      .select('id, username, is_admin, highest_rank, highest_rank_at, created_at, updated_at')
       .eq('username', username)
       .single()
 
@@ -54,13 +72,14 @@ export async function getUserByUsername(username: string): Promise<User | null> 
       return null
     }
 
-    return data
+    return data as unknown as User
   } catch (error) {
     console.error('Error fetching user by username:', error)
     return null
   }
 }
 
+// (ini kayaknya jarang dipake, tapi biarin aja sinkron)
 export async function getUserChallenges(userId: string): Promise<ChallengeWithSolve[]> {
   try {
     const { data: challenges, error: challengesError } = await supabase
@@ -91,7 +110,7 @@ export async function getUserChallenges(userId: string): Promise<ChallengeWithSo
     return challenges.map(challenge => ({
       ...challenge,
       is_solved: solvedChallengeIds.has(challenge.id),
-      attachments: challenge.attachments || []
+      attachments: challenge.attachments || [],
     }))
   } catch (error) {
     console.error('Error fetching user challenges:', error)
@@ -101,23 +120,24 @@ export async function getUserChallenges(userId: string): Promise<ChallengeWithSo
 
 export async function getAllUsers(): Promise<User[]> {
   try {
+    // di skema kamu tabel public.users TIDAK punya kolom "score"
+    // jadi kita urutkan pakai created_at aja biar gak error
     const { data, error } = await supabase
       .from('users')
-      .select('*')
-      .order('score', { ascending: false })
+      .select('id, username, is_admin, highest_rank, highest_rank_at, created_at')
+      .order('created_at', { ascending: false })
 
     if (error) {
       console.error('Error fetching users:', error)
       return []
     }
 
-    return data || []
+    return (data || []) as unknown as User[]
   } catch (error) {
     console.error('Error fetching users:', error)
     return []
   }
 }
-
 
 // Get category totals (total challenge per kategori)
 export type CategoryTotal = {
@@ -157,7 +177,6 @@ export async function getInfo(): Promise<SiteInfo | null> {
       console.error('Error fetching site info:', error)
       return null
     }
-    // RPC returns a JSON object
     return {
       total_users: Number(data.total_users || 0),
       total_admins: Number(data.total_admins || 0),
@@ -173,20 +192,23 @@ export async function getInfo(): Promise<SiteInfo | null> {
 }
 
 // Update current user's username via RPC
-export async function updateUsername(userId: string, newUsername: string): Promise<{ error: string | null, username?: string }> {
+export async function updateUsername(
+  userId: string,
+  newUsername: string
+): Promise<{ error: string | null; username?: string }> {
   try {
     const { data, error } = await supabase.rpc('update_username', {
       p_id: userId,
-      p_username: newUsername
-    });
+      p_username: newUsername,
+    })
     if (error || !data) {
-      return { error: error?.message || 'Failed to update username' };
+      return { error: error?.message || 'Failed to update username' }
     }
     if (!data.success) {
-      return { error: data.message || 'Failed to update username' };
+      return { error: data.message || 'Failed to update username' }
     }
-    return { error: null, username: data.username };
+    return { error: null, username: data.username }
   } catch (error) {
-    return { error: 'Failed to update username' };
+    return { error: 'Failed to update username' }
   }
 }

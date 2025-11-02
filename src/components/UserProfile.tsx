@@ -21,6 +21,8 @@ type UserDetail = {
   score: number;
   picture?: string | null;
   solved_challenges: ChallengeWithSolve[];
+  highest_rank?: number | null;
+  highest_rank_at?: string | null;
 };
 
 type Props = {
@@ -51,23 +53,17 @@ function getUserBadges(
       color: "bg-yellow-400 text-yellow-900 border-yellow-500",
       icon: "🥇",
     });
-  } else if (rank && rank <= 2) {
-    badges.push({
-      label: "Top 2",
-      color: "bg-yellow-300 text-yellow-900 border-yellow-400",
-      icon: "🥈",
-    });
   } else if (rank && rank <= 3) {
     badges.push({
       label: "Top 3",
       color: "bg-yellow-300 text-yellow-900 border-yellow-400",
-      icon: "🥉",
+      icon: "🥈",
     });
   } else if (rank && rank <= 10) {
     badges.push({
       label: "Top 10",
       color: "bg-yellow-200 text-yellow-900 border-yellow-300",
-      icon: "🏅",
+      icon: "🥉",
     });
   } else if (rank && rank <= 25) {
     badges.push({
@@ -268,6 +264,32 @@ export default function UserProfile({
                           </span>
                         </span>
                       ))}
+
+                      {/* 👑 Badge tambahan: Pernah #1 */}
+                      {/* 👑 Badge tambahan: Pernah Top 1–3 */}
+                      {userDetail.highest_rank &&
+                        userDetail.highest_rank <= 3 && (
+                          <span
+                            className={`inline-flex items-center border px-1.5 py-0.5 rounded-md text-xs font-semibold shadow-sm hover:scale-105 transition-all duration-150
+      ${
+        userDetail.highest_rank === 1
+          ? "border-yellow-400 bg-yellow-100 text-yellow-900"
+          : userDetail.highest_rank === 2
+          ? "border-gray-400 bg-gray-100 text-gray-900"
+          : "border-orange-400 bg-orange-100 text-orange-900"
+      }`}
+                          >
+                            <span
+                              className="mr-1 text-base"
+                              style={{ fontSize: "1em" }}
+                            >
+                              👑
+                            </span>
+                            <span className="truncate max-w-[100px]">
+                              Pernah Top {userDetail.highest_rank}
+                            </span>
+                          </span>
+                        )}
                     </div>
                   </div>
                   {isCurrentUser && userDetail && (
@@ -485,6 +507,7 @@ export default function UserProfile({
                                 : "-"}
                             </p>
                           </div>
+
                           {/* Right */}
                           <span className="text-sm font-semibold text-green-600 dark:text-green-300 whitespace-nowrap">
                             +{challenge.points}
