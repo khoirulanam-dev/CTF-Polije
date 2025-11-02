@@ -73,6 +73,7 @@ export const metadata: Metadata = {
     "Cybersecurity Trends",
     "CTF Development",
     "Cybersecurity Solutions",
+    "Politeknik Negeri Jember",
   ],
   authors: [{ name: "Khoirul Anam", url: APP.baseUrl }],
   creator: "Khoirul Anam",
