@@ -13,6 +13,7 @@ export const APP = {
     'Web',
     'Reverse',
     'Network',
+    'Blockchain',
   ],
   links: {
     github: 'https://github.com/Anam1602',
