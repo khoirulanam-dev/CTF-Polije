@@ -1,354 +1,492 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { getChallenges, submitFlag, getSolversByChallenge } from '@/lib/challenges'
-import { ChallengeWithSolve, User, Attachment } from '@/types'
-import { motion } from 'framer-motion'
-import ChallengeCard from '@/components/challenges/ChallengeCard'
-import ChallengeDetailDialog from '@/components/challenges/ChallengeDetailDialog'
-import Loader from '@/components/custom/loading'
-import TitlePage from '@/components/custom/TitlePage'
-import { Solver } from '@/components/challenges/SolversList';
-import ChallengeFilterBar from '@/components/challenges/ChallengeFilterBar'
-import APP from '@/config'
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+
+import {
+  getChallenges,
+  submitFlag,
+  getSolversByChallenge,
+} from "@/lib/challenges";
+import { ChallengeWithSolve, Attachment } from "@/types";
+import ChallengeCard from "@/components/challenges/ChallengeCard";
+import ChallengeDetailDialog from "@/components/challenges/ChallengeDetailDialog";
+import Loader from "@/components/custom/loading";
+import TitlePage from "@/components/custom/TitlePage";
+import { Solver } from "@/components/challenges/SolversList";
+import ChallengeFilterBar from "@/components/challenges/ChallengeFilterBar";
+import APP from "@/config";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ChallengesPage() {
-  // Saat tab solvers dibuka, fetch solvers
-  const handleTabChange = async (tab: 'challenge' | 'solvers', challengeId: string) => {
-    setChallengeTab(tab);
-    if (tab === 'solvers') {
-      try {
-        const data = await getSolversByChallenge(challengeId);
-        setSolvers(data);
-      } catch (err) {
-        setSolvers([]);
-      }
-    }
-  };
-  const router = useRouter()
-  const [challengeTab, setChallengeTab] = useState<'challenge' | 'solvers'>('challenge');
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  const [challengeTab, setChallengeTab] = useState<"challenge" | "solvers">(
+    "challenge"
+  );
   const [solvers, setSolvers] = useState<Solver[]>([]);
-  const [challenges, setChallenges] = useState<ChallengeWithSolve[]>([])
-  const [flagInputs, setFlagInputs] = useState<{[key: string]: string}>({})
-  const [flagFeedback, setFlagFeedback] = useState<{[key: string]: { success: boolean, message: string } | null}>({})
-  const [submitting, setSubmitting] = useState<{[key: string]: boolean}>({})
-  const [expandedChallenges, setExpandedChallenges] = useState<{[key: string]: boolean}>({})
-  const [showHintModal, setShowHintModal] = useState<{challenge: ChallengeWithSolve | null, hintIdx?: number}>({challenge: null})
-  const [downloading, setDownloading] = useState<{[key: string]: boolean}>({})
-  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeWithSolve | null>(null)
+  const [challenges, setChallenges] = useState<ChallengeWithSolve[]>([]);
+  const [flagInputs, setFlagInputs] = useState<{ [key: string]: string }>({});
+  const [flagFeedback, setFlagFeedback] = useState<{
+    [key: string]: { success: boolean; message: string } | null;
+  }>({});
+  const [submitting, setSubmitting] = useState<{ [key: string]: boolean }>({});
+  const [showHintModal, setShowHintModal] = useState<{
+    challenge: ChallengeWithSolve | null;
+    hintIdx?: number;
+  }>({ challenge: null });
+  const [downloading, setDownloading] = useState<{ [key: string]: boolean }>(
+    {}
+  );
+  const [selectedChallenge, setSelectedChallenge] =
+    useState<ChallengeWithSolve | null>(null);
   const [filters, setFilters] = useState({
-    status: 'all',
-    category: 'all',
-    difficulty: 'all',
-    search: ''
-  })
-  const { user, loading } = require('@/contexts/AuthContext').useAuth();
-  // Redirect ke /login jika user belum login dan sudah selesai loading
+    status: "all",
+    category: "all",
+    difficulty: "all",
+    search: "",
+  });
+
+  // redirect kalau belum login
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/login');
+      router.push("/login");
     }
   }, [user, loading, router]);
 
+  // ambil challenges
   useEffect(() => {
     const fetchChallenges = async () => {
-      if (!user) {
-        return
-      }
-      const challengesData = await getChallenges(user.id)
-      // Normalize hint field to string[] for each challenge
-      const normalizedChallenges = challengesData.map((challenge: any) => {
+      if (!user) return;
+      const challengesData = await getChallenges(user.id);
+
+      // normalisasi field hint
+      const normalized = challengesData.map((challenge: any) => {
         let hints: string[] = [];
         const raw = challenge.hint;
         if (Array.isArray(raw)) {
-          hints = raw.filter((h: any) => typeof h === 'string');
-        } else if (typeof raw === 'string') {
+          hints = raw.filter((h: any) => typeof h === "string");
+        } else if (typeof raw === "string") {
           try {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-              hints = parsed.filter((h: any) => typeof h === 'string');
-            } else if (typeof parsed === 'string') {
+              hints = parsed.filter((h: any) => typeof h === "string");
+            } else if (typeof parsed === "string") {
               hints = [parsed];
             } else if (parsed === null) {
               hints = [];
             }
           } catch {
-            if (raw.trim() !== '') hints = [raw];
+            if (raw.trim() !== "") hints = [raw];
           }
-        } else if (raw && typeof raw === 'object') {
-          // ignore unexpected object
+        } else if (raw && typeof raw === "object") {
+          // skip
         } else if (raw) {
           hints = [String(raw)];
         }
         return { ...challenge, hint: hints };
       });
-      setChallenges(normalizedChallenges);
-    }
-    fetchChallenges()
-  }, [user])
 
-  // Tambahkan useEffect ini setelah deklarasi state
+      setChallenges(normalized);
+    };
+
+    fetchChallenges();
+  }, [user]);
+
+  // kalau detail kebuka → ambil solvers
   useEffect(() => {
     if (selectedChallenge) {
-      // Fetch solvers setiap kali challenge detail dibuka
       getSolversByChallenge(selectedChallenge.id)
         .then(setSolvers)
         .catch(() => setSolvers([]));
     }
   }, [selectedChallenge]);
 
-  const handleFlagSubmit = async (challengeId: string) => {
-    if (!user || !flagInputs[challengeId]?.trim()) return
+  const handleTabChange = async (
+    tab: "challenge" | "solvers",
+    challengeId: string
+  ) => {
+    setChallengeTab(tab);
+    if (tab === "solvers") {
+      try {
+        const data = await getSolversByChallenge(challengeId);
+        setSolvers(data);
+      } catch {
+        setSolvers([]);
+      }
+    }
+  };
 
-    setSubmitting(prev => ({ ...prev, [challengeId]: true }))
-    setFlagFeedback(prev => ({ ...prev, [challengeId]: null })) // reset dulu
+  const handleFlagSubmit = async (challengeId: string) => {
+    if (!user || !flagInputs[challengeId]?.trim()) return;
+
+    setSubmitting((prev) => ({ ...prev, [challengeId]: true }));
+    setFlagFeedback((prev) => ({ ...prev, [challengeId]: null }));
 
     try {
-      const result = await submitFlag(challengeId, flagInputs[challengeId].trim())
+      const result = await submitFlag(
+        challengeId,
+        flagInputs[challengeId].trim()
+      );
 
-      // Refresh challenge list
-      const challengesData = await getChallenges(user.id)
-      setChallenges(challengesData)
+      // refresh list sesudah submit
+      const challengesData = await getChallenges(user.id);
+      setChallenges(challengesData);
 
-      // set feedback box
-      setFlagFeedback(prev => ({
+      setFlagFeedback((prev) => ({
         ...prev,
-        [challengeId]: { success: result.success, message: result.message }
-      }))
+        [challengeId]: { success: result.success, message: result.message },
+      }));
 
       if (result.success) {
-        const audio = new Audio('/sounds/succes.wav')
-        audio.volume = 0.3
-        audio.play().catch(() => {})
+        const audio = new Audio("/sounds/succes.wav");
+        audio.volume = 0.3;
+        audio.play().catch(() => {});
 
-        // 🎉 tampilkan confetti
-        import('canvas-confetti').then((confetti) => {
-          const duration = 0.8 * 1000
-          const end = Date.now() + duration
+        // confetti
+        import("canvas-confetti").then((confetti) => {
+          const duration = 800;
+          const end = Date.now() + duration;
 
           const frame = () => {
             confetti.default({
-              particleCount: 3, // lebih sedikit
-              startVelocity: 20, // gak terlalu cepat
-              spread: 360, // gak terlalu lebar
-              ticks: 80, // agak lama
-              gravity: 0.8, // jatuh pelan
-              scalar: 0.8, // kecil dikit
-              colors: ['#00e0ff', '#ffffff', '#ff7b00'], // warna sesuai tema
+              particleCount: 3,
+              startVelocity: 20,
+              spread: 360,
+              ticks: 80,
+              gravity: 0.8,
+              scalar: 0.8,
+              colors: ["#00e0ff", "#ffffff", "#ff7b00"],
               origin: { x: Math.random(), y: Math.random() - 0.2 },
-            })
+            });
+            if (Date.now() < end) requestAnimationFrame(frame);
+          };
 
-            if (Date.now() < end) requestAnimationFrame(frame)
-          }
+          frame();
+        });
 
-          frame()
-        })
-
-        setFlagInputs(prev => ({ ...prev, [challengeId]: '' }))
+        setFlagInputs((prev) => ({ ...prev, [challengeId]: "" }));
       }
-    } catch (error) {
-      console.error('Error submitting flag:', error)
-      setFlagFeedback(prev => ({
+    } catch (err) {
+      console.error(err);
+      setFlagFeedback((prev) => ({
         ...prev,
-        [challengeId]: { success: false, message: "Failed to submit flag" }
-      }))
+        [challengeId]: { success: false, message: "Failed to submit flag" },
+      }));
     } finally {
-      setSubmitting(prev => ({ ...prev, [challengeId]: false }))
+      setSubmitting((prev) => ({ ...prev, [challengeId]: false }));
     }
-  }
+  };
 
   const handleFlagInputChange = (challengeId: string, value: string) => {
-    setFlagInputs(prev => ({ ...prev, [challengeId]: value }))
-  }
+    setFlagInputs((prev) => ({ ...prev, [challengeId]: value }));
+  };
 
-  const toggleChallengeExpansion = (challengeId: string) => {
-    setExpandedChallenges(prev => {
-      const isCurrentlyOpen = prev[challengeId]
-
-      if (isCurrentlyOpen) {
-        // If clicking on currently open challenge, close it
-        return { [challengeId]: false }
-      } else {
-        // If clicking on closed challenge, close all others and open this one
-        return { [challengeId]: true }
-      }
-    })
-  }
-
-  const showHint = (challenge: ChallengeWithSolve) => {
-    setShowHintModal({ challenge })
-  }
-
-  // Filter challenges based on current filters
-  const filteredChallenges = challenges.filter(challenge => {
-    // Status filter
-    if (filters.status === 'solved' && !challenge.is_solved) return false
-    if (filters.status === 'unsolved' && challenge.is_solved) return false
-
-    // Category filter
-    if (filters.category !== 'all' && challenge.category !== filters.category) return false
-
-    // Difficulty filter
-    if (filters.difficulty !== 'all' && challenge.difficulty !== filters.difficulty) return false
-
-    // Search filter
+  // filter challenge
+  const filteredChallenges = challenges.filter((challenge) => {
+    if (filters.status === "solved" && !challenge.is_solved) return false;
+    if (filters.status === "unsolved" && challenge.is_solved) return false;
+    if (filters.category !== "all" && challenge.category !== filters.category)
+      return false;
+    if (
+      filters.difficulty !== "all" &&
+      challenge.difficulty !== filters.difficulty
+    )
+      return false;
     if (filters.search) {
-      const searchLower = filters.search.toLowerCase()
-      const titleMatch = challenge.title.toLowerCase().includes(searchLower)
-      const descMatch = challenge.description.toLowerCase().includes(searchLower)
-      if (!titleMatch && !descMatch) return false
+      const k = filters.search.toLowerCase();
+      const titleMatch = challenge.title.toLowerCase().includes(k);
+      const descMatch = challenge.description.toLowerCase().includes(k);
+      if (!titleMatch && !descMatch) return false;
     }
+    return true;
+  });
 
-    return true
-  })
+  // urutan kategori
+  const preferredOrder = APP.challengeCategories || [];
+  const allCategories = Array.from(
+    new Set(challenges.map((c) => c.category))
+  ).filter(Boolean);
 
-  // Preferred order for categories (ambil dari config)
-  const preferredOrder = APP.challengeCategories || []
-
-  // Get unique categories and difficulties for filter options
-  const allCategories = Array.from(new Set(challenges.map(c => c.category))).filter(Boolean)
-  // Build categories by fuzzy-matching preferredOrder items (substring, case-insensitive)
-  const matchedCategorySet = new Set<string>()
+  const matchedCategorySet = new Set<string>();
   const categories = [
-    ...preferredOrder.flatMap(p => {
-      const pLower = p.toLowerCase()
-      const found = allCategories.find(c => {
-        const cLower = c.toLowerCase()
-        return cLower.includes(pLower) || pLower.includes(cLower)
-      })
+    ...preferredOrder.flatMap((p) => {
+      const pLower = p.toLowerCase();
+      const found = allCategories.find((c) => {
+        const cLower = c.toLowerCase();
+        return cLower.includes(pLower) || pLower.includes(cLower);
+      });
       if (found && !matchedCategorySet.has(found)) {
-        matchedCategorySet.add(found)
-        return found
+        matchedCategorySet.add(found);
+        return found;
       }
-      return [] as string[]
+      return [] as string[];
     }),
-    ...allCategories.filter(c => !matchedCategorySet.has(c)).sort()
-  ]
+    ...allCategories.filter((c) => !matchedCategorySet.has(c)).sort(),
+  ];
 
-  const difficulties = Array.from(new Set(challenges.map(c => c.difficulty))).sort()
+  const difficulties = Array.from(
+    new Set(challenges.map((c) => c.difficulty))
+  ).sort();
 
-  // Pre-compute grouping and ordering for rendering to avoid JSX IIFE parsing issues
+  // kelompokkan per kategori
   const grouped = filteredChallenges.reduce((acc, challenge) => {
-    if (!acc[challenge.category]) acc[challenge.category] = []
-    acc[challenge.category].push(challenge)
-    return acc
-  }, {} as {[key: string]: ChallengeWithSolve[]})
+    if (!acc[challenge.category]) acc[challenge.category] = [];
+    acc[challenge.category].push(challenge);
+    return acc;
+  }, {} as { [key: string]: ChallengeWithSolve[] });
 
-  const groupKeys = Object.keys(grouped)
-  // Fuzzy match group keys against preferredOrder
-  const matchedKeySet = new Set<string>()
+  const groupKeys = Object.keys(grouped);
+  const matchedKeySet = new Set<string>();
   const orderedKeys = [
-    ...preferredOrder.flatMap(p => {
-      const pLower = p.toLowerCase()
-      const found = groupKeys.find(k => {
-        const kLower = k.toLowerCase()
-        return kLower.includes(pLower) || pLower.includes(kLower)
-      })
+    ...preferredOrder.flatMap((p) => {
+      const pLower = p.toLowerCase();
+      const found = groupKeys.find((k) => {
+        const kLower = k.toLowerCase();
+        return kLower.includes(pLower) || pLower.includes(kLower);
+      });
       if (found && !matchedKeySet.has(found)) {
-        matchedKeySet.add(found)
-        return found
+        matchedKeySet.add(found);
+        return found;
       }
-      return [] as string[]
+      return [] as string[];
     }),
-    ...groupKeys.filter(k => !matchedKeySet.has(k)).sort()
-  ]
+    ...groupKeys.filter((k) => !matchedKeySet.has(k)).sort(),
+  ];
 
-  const downloadFile = async (attachment: Attachment, attachmentKey: string) => {
-    setDownloading(prev => ({ ...prev, [attachmentKey]: true }))
+  // buat partikel deterministik biar ga mismatch
+  const particles = useMemo(
+    () =>
+      Array.from({ length: 26 }).map((_, i) => ({
+        top: `${(i * 37) % 100}%`,
+        left: `${(i * 19) % 100}%`,
+        size: (i % 3) + 2,
+        duration: 4 + (i % 5),
+      })),
+    []
+  );
 
+  const downloadFile = async (
+    attachment: Attachment,
+    attachmentKey: string
+  ) => {
+    setDownloading((prev) => ({ ...prev, [attachmentKey]: true }));
     try {
-      if (attachment.type === 'file') {
-        const response = await fetch(attachment.url)
-        if (!response.ok) throw new Error('Failed to fetch file')
-
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-
-        const link = document.createElement('a')
-        link.href = url
-        link.download = attachment.name || 'download'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(url)
+      if (attachment.type === "file") {
+        const res = await fetch(attachment.url);
+        if (!res.ok) throw new Error("Failed to fetch file");
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = attachment.name || "download";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
       } else {
-        window.open(attachment.url, '_blank')
+        window.open(attachment.url, "_blank");
       }
-    } catch (error) {
-      console.error('Download failed:', error)
-      window.open(attachment.url, '_blank')
+    } catch (err) {
+      console.error(err);
+      window.open(attachment.url, "_blank");
     } finally {
-      setDownloading(prev => ({ ...prev, [attachmentKey]: false }))
+      setDownloading((prev) => ({ ...prev, [attachmentKey]: false }));
     }
-  }
+  };
 
-  if (loading) return <Loader fullscreen color="text-orange-500" />
-  // Jangan render apapun jika belum login, biar redirect jalan
-  if (!user) return null
+  if (loading) return <Loader fullscreen color="text-orange-500" />;
+  if (!user) return null;
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-        <TitlePage>🚩 challenges</TitlePage>
+    <div className="relative min-h-screen pt-5 overflow-hidden">
+      {/* 1) gradient dinamis */}
+      <motion.div
+        aria-hidden
+        className="fixed inset-0 -z-30 bg-[radial-gradient(ellipse_at_top_left,_#0ea5e9_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_#4f46e5_0%,_transparent_55%)] blur-3xl"
+        animate={{
+          backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
+        }}
+        transition={{
+          duration: 25,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+      />
 
-        <ChallengeFilterBar
-          filters={filters}
-          categories={categories}
-          difficulties={difficulties}
-          onFilterChange={setFilters}
-          onClear={() => setFilters({ status: 'all', category: 'all', difficulty: 'all', search: '' })}
-          showStatusFilter={true}
-        />
+      {/* 2) glow stream */}
+      <motion.div
+        aria-hidden
+        className="fixed inset-0 -z-20 opacity-20 bg-[repeating-linear-gradient(180deg,_rgba(148,163,184,0.12)_0px,_rgba(148,163,184,0.12)_2px,_transparent_2px,_transparent_6px)]"
+        animate={{
+          backgroundPositionY: ["0%", "100%"],
+        }}
+        transition={{
+          duration: 13,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+      />
 
-        {/* Challenges Grid Grouped by Category */}
-        <div>
-          {!user || loading ? (
-            <Loader fullscreen color="text-orange-500" />
-          ) : filteredChallenges.length === 0 ? (
+      {/* 3) partikel */}
+      <motion.div
+        aria-hidden
+        className="fixed inset-0 -z-10 pointer-events-none"
+        animate={{
+          opacity: [0.3, 0.7, 0.3],
+        }}
+        transition={{
+          duration: 7,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      >
+        {particles.map((p, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full bg-cyan-200/40"
+            style={{
+              top: p.top,
+              left: p.left,
+              width: p.size,
+              height: p.size,
+            }}
+            animate={{
+              y: [0, -8, 0],
+              opacity: [0.2, 1, 0.2],
+            }}
+            transition={{
+              duration: p.duration,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.13,
+            }}
+          />
+        ))}
+      </motion.div>
+
+      {/* style scrollbar */}
+      <style jsx global>{`
+        /* webkit scroll */
+        ::-webkit-scrollbar {
+          width: 9px;
+        }
+        ::-webkit-scrollbar-track {
+          background: rgba(2, 6, 23, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #38bdf8 0%, #0f172a 80%);
+          border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, #0ea5e9 0%, #1d4ed8 100%);
+        }
+      `}</style>
+
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-5 pb-20">
+        {/* header */}
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <TitlePage>🚩 challenges</TitlePage>
+
+          <div className="flex gap-3">
+            <div className="rounded-2xl bg-slate-900/40 border border-slate-700/70 px-4 py-2 text-sm text-slate-100">
+              Total chall:{" "}
+              <span className="font-semibold">{challenges.length}</span>
+            </div>
+            <div className="rounded-2xl bg-slate-900/40 border border-slate-700/70 px-4 py-2 text-sm text-slate-100">
+              Solved:{" "}
+              <span className="font-semibold">
+                {challenges.filter((c) => c.is_solved).length}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* filter bar */}
+        <div className="rounded-2xl bg-slate-950/50 border border-slate-800/70 backdrop-blur-sm shadow-[0_10px_40px_rgba(15,23,42,0.25)]">
+          <ChallengeFilterBar
+            filters={filters}
+            categories={categories}
+            difficulties={difficulties}
+            onFilterChange={setFilters}
+            onClear={() =>
+              setFilters({
+                status: "all",
+                category: "all",
+                difficulty: "all",
+                search: "",
+              })
+            }
+            showStatusFilter={true}
+          />
+        </div>
+
+        {/* daftar challenge */}
+        <div className="space-y-6">
+          {filteredChallenges.length === 0 ? (
             <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl text-gray-400 dark:text-gray-500">🔍</span>
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-900/50">
+                <span className="text-2xl">🔍</span>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              <p className="text-slate-100 text-lg font-semibold">
                 {challenges.length === 0
                   ? "No challenges available"
-                  : "No challenges match your filters"
-                }
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400">
+                  : "No challenges match your filters"}
+              </p>
+              <p className="text-slate-400 text-sm">
                 {challenges.length === 0
                   ? "Check back later for new challenges"
-                  : "Try adjusting your filter criteria"
-                }
+                  : "Try adjusting your filter"}
               </p>
             </div>
           ) : (
-            orderedKeys.map((category) => (
-              <div key={category} className="mb-12">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-orange-400 dark:text-orange-300 text-2xl">{'»'}</span>
-                  <h2 className="text-xl sm:text-2xl tracking-widest font-bold uppercase text-gray-800 dark:text-white">{category}</h2>
+            orderedKeys.map((category, idx) => (
+              <motion.div
+                key={category}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: idx * 0.04 }}
+                className="space-y-3"
+              >
+                {/* judul kategori */}
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 via-cyan-300 to-blue-600 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
+                  <h2 className="text-[1.35rem] font-extrabold tracking-wider uppercase text-white drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]">
+                    {category}
+                  </h2>
+                  <span className="ml-2 text-xs font-semibold text-sky-400 bg-sky-500/10 px-2 py-[1px] rounded-md border border-sky-600/40">
+                    {grouped[category].length} Challenges
+                  </span>
                 </div>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
-                >
+
+                {/* grid challenge */}
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                   {grouped[category].map((challenge) => (
-                    <ChallengeCard
+                    <motion.div
                       key={challenge.id}
-                      challenge={challenge}
-                      onClick={() => setSelectedChallenge(challenge)}
-                    />
+                      whileHover={{ y: -5, scale: 1.02 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 240,
+                        damping: 18,
+                      }}
+                    >
+                      <ChallengeCard
+                        challenge={challenge}
+                        onClick={() => setSelectedChallenge(challenge)}
+                      />
+                    </motion.div>
                   ))}
-                </motion.div>
-              </div>
+                </div>
+              </motion.div>
             ))
           )}
         </div>
       </div>
 
-      {/* Dialog tetap bisa pakai !user cek */}
+      {/* dialog detail */}
       {user && (
         <ChallengeDetailDialog
           open={!!selectedChallenge}
@@ -356,15 +494,15 @@ export default function ChallengesPage() {
           solvers={solvers}
           challengeTab={challengeTab}
           setChallengeTab={(tab, challengeId) => {
-            if (tab === 'solvers' && selectedChallenge) {
-              handleTabChange(tab, selectedChallenge.id)
+            if (tab === "solvers" && selectedChallenge) {
+              handleTabChange(tab, selectedChallenge.id);
             } else {
-              setChallengeTab(tab)
+              setChallengeTab(tab);
             }
           }}
           onClose={() => {
-            setSelectedChallenge(null)
-            setChallengeTab('challenge')
+            setSelectedChallenge(null);
+            setChallengeTab("challenge");
           }}
           flagInputs={flagInputs}
           handleFlagInputChange={handleFlagInputChange}
@@ -378,5 +516,5 @@ export default function ChallengesPage() {
         />
       )}
     </div>
-  )
+  );
 }
