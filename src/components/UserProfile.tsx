@@ -107,6 +107,66 @@ function getUserBadges(
       color: "bg-yellow-200 text-yellow-900 border-yellow-300",
       icon: "🏅",
     });
+  } else if (rank && rank <= 11) {
+    badges.push({
+      label: "Top 11",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 12) {
+    badges.push({
+      label: "Top 12",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 13) {
+    badges.push({
+      label: "Top 13",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 14) {
+    badges.push({
+      label: "Top 14",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 15) {
+    badges.push({
+      label: "Top 15",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 16) {
+    badges.push({
+      label: "Top 16",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 17) {
+    badges.push({
+      label: "Top 17",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 18) {
+    badges.push({
+      label: "Top 18",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 19) {
+    badges.push({
+      label: "Top 19",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
+  } else if (rank && rank <= 20) {
+    badges.push({
+      label: "Top 20",
+      color: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      icon: "🏅",
+    });
   } else if (rank && rank <= 25) {
     badges.push({
       label: "Top 25",
