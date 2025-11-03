@@ -313,13 +313,13 @@ export default function UserProfile({
                         userDetail.highest_rank <= 3 && (
                           <span
                             className={`inline-flex items-center border px-1.5 py-0.5 rounded-md text-xs font-semibold shadow-sm hover:scale-105 transition-all duration-150
-      ${
-        userDetail.highest_rank === 1
-          ? "border-yellow-400 bg-yellow-100 text-yellow-900"
-          : userDetail.highest_rank === 2
-          ? "border-gray-400 bg-gray-100 text-gray-900"
-          : "border-orange-400 bg-orange-100 text-orange-900"
-      }`}
+                            ${
+                              userDetail.highest_rank === 1
+                                ? "border-yellow-400 bg-yellow-100 text-yellow-900"
+                                : userDetail.highest_rank === 2
+                                ? "border-gray-400 bg-gray-100 text-gray-900"
+                                : "border-orange-400 bg-orange-100 text-orange-900"
+                            }`}
                           >
                             <span
                               className="mr-1 text-base"

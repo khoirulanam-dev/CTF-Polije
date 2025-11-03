@@ -24,9 +24,9 @@ export function isValidUsername(username: string): string | null {
   if (/([\uD83C-\uDBFF][\uDC00-\uDFFF]|[\u2600-\u27BF])/.test(username)) {
     return 'Username cannot contain emoji.'
   }
-  // Hanya boleh huruf, angka, underscore, titik, strip
-  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
-    return 'Username can only contain letters, numbers, ".", "_", and "-".'
+  // Hanya boleh huruf, angka, underscore, titik, strip, spasi
+  if (!/^[a-zA-Z0-9_.-\s]+$/.test(username)) {
+  return 'Username can only contain letters, numbers, ".", "_", "-", and spaces.'
   }
   return null // valid
 }
