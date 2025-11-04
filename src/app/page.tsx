@@ -1,185 +1,100 @@
-"use client"
+// src/app/page.tsx
+"use client";
 
-import { motion } from "framer-motion"
-import Loader from "@/components/custom/loading"
-import Footer from "@/components/custom/Footer"
-import { Button } from "@/components/ui/button"
-import APP from '@/config'
+import Link from "next/link";
+import { motion } from "framer-motion";
 
-export default function Home() {
-  const { user, loading } = require("@/contexts/AuthContext").useAuth();
-
-  if (loading) {
-    return <Loader fullscreen color="text-orange-500" />
-  }
-
+export default function HomePage() {
   return (
-    <div className="flex flex-col min-h-[calc(100lvh-60px)] bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
-      {/* Global Decorative background shapes */}
-      <div className="absolute -top-32 -left-32 w-[28rem] h-[28rem] bg-orange-100 dark:bg-orange-900 rounded-full blur-3xl opacity-40 animate-pulse" />
-      <div className="absolute -bottom-32 -right-32 w-[28rem] h-[28rem] bg-orange-200 dark:bg-orange-800 rounded-full blur-3xl opacity-30 animate-pulse" />
+    <div className="relative min-h-[calc(100vh-64px)] bg-slate-950 overflow-hidden">
+      {/* BG sama style dengan login/register */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(37,99,235,0.18),transparent_70%),radial-gradient(circle_at_80%_70%,rgba(14,165,233,0.15),transparent_70%)]" />
 
-      {/* Hero Section */}
-      <section className="flex flex-col items-center justify-center flex-1 text-center px-6 relative z-10">
-        <motion.h1
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
-          className="text-5xl md:text-6xl font-extrabold text-orange-600 dark:text-orange-400 mb-4 drop-shadow-lg"
-        >
-          Welcome to{" "}
-          <span className="bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">
-            {APP.fullName}
-          </span>{" "}
-          🚩
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="text-lg md:text-xl text-gray-700 dark:text-gray-200 max-w-2xl mb-8"
-        >
-          Practice your{" "}
-          <span className="font-semibold text-orange-600 dark:text-orange-400">
-            cybersecurity skills
-          </span>{" "}
-          through{" "}
-          <span className="font-semibold text-orange-600 dark:text-orange-400">
-            Jeopardy-style Capture The Flag (CTF)
-          </span>{" "}
-          challenges — solve chall, collect flags, and climb the{" "}
-          <span className="font-semibold text-orange-600 dark:text-orange-400">
-            leaderboard
-          </span>
-          {/* . Join our{" "}
-          <a
-            href={APP.links.discord}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-orange-600 dark:text-orange-400 hover:underline"
+      <div className="pointer-events-none absolute -bottom-40 right-[-10rem] h-[28rem] w-[28rem] rounded-full bg-sky-500/18 blur-3xl" />
+
+      {/* Konten + footer dalam flex kolom */}
+      <div className="relative z-10 flex min-h-[calc(100vh-64px)] flex-col">
+        <main className="flex flex-1 flex-col items-center justify-center px-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+            className="max-w-4xl mx-auto space-y-6"
           >
-            Discord community
-          </a>{" "}
-          for discussions and help! */}
-        </motion.p>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-orange-400 drop-shadow-[0_0_25px_rgba(248,163,88,0.35)]">
+              Welcome to POLIJE CTF Platform
+              <span className="ml-1 inline-block align-middle">🚩</span>
+            </h1>
 
-        {/* Flag Format Info Box */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5, duration: 0.4 }}
-          className="mb-8 flex items-center justify-center"
-        >
-          <div className="flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 border border-orange-200 dark:border-orange-700 rounded-lg px-4 py-2 shadow-md text-base md:text-lg font-mono text-orange-600 dark:text-orange-400">
-            <span className="font-bold">Flag format:</span>
-            <span className="select-all">{APP.flagFormat}</span>
-          </div>
-        </motion.div>
+            <p className="text-sm sm:text-base text-slate-200 max-w-2xl mx-auto">
+              Practice your{" "}
+              <span className="font-semibold text-sky-300">
+                cybersecurity skills
+              </span>{" "}
+              through Jeopardy-style Capture The Flag (CTF) challenges — solve
+              chall, collect flags, and climb the leaderboard.
+            </p>
 
-        {/* CTA Buttons */}
-        <div className="flex gap-4 z-10">
-          {user ? (
-            <>
-              <Button
-                asChild
-                className="bg-orange-600 text-white hover:bg-orange-700 px-6 py-3 rounded-xl shadow-lg"
-              >
-                <a href="/challenges">Start Challenges</a>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="px-4 py-3 rounded-xl border-orange-600 text-orange-600 hover:bg-orange-50 shadow-lg"
-              >
-                <a href="/rules">Rules</a>
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                asChild
-                className="bg-orange-600 text-white hover:bg-orange-700 px-6 py-3 rounded-xl shadow-lg"
-              >
-                <a href="/login">Login</a>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="px-6 py-3 rounded-xl border-orange-600 text-orange-600 hover:bg-orange-50 shadow-lg"
-              >
-                <a href="/register">Register</a>
-              </Button>
-            </>
-          )}
-        </div>
-      </section>
+            {/* Flag format pill */}
+            <div className="flex justify-center">
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-900/70 px-4 py-2 text-xs sm:text-sm text-sky-200 border border-sky-500/30 shadow-[0_0_25px_rgba(56,189,248,0.4)]">
+                <span className="text-pink-400">🏴‍☠️ Flag format:</span>
+                <code className="font-mono text-[0.78rem] sm:text-xs text-sky-100">
+                  POLIJE&#123;your_flag_here&#125;
+                </code>
+              </div>
+            </div>
 
-      {/* Footer */}
-      <Footer></Footer>
-      {/* <footer className="bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-8 relative z-10">
-        <div className="border-t border-gray-200 dark:border-gray-700 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          <p>
+            {/* Buttons */}
+            <div className="mt-4 flex items-center justify-center gap-4">
+              <Link href="/challenges">
+                <motion.button
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="rounded-xl bg-gradient-to-r from-sky-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(56,189,248,0.45)]"
+                >
+                  Start Challenges
+                </motion.button>
+              </Link>
+
+              <Link href="/rules">
+                <motion.button
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="rounded-xl border border-slate-600/70 bg-slate-900/60 px-6 py-2.5 text-sm font-semibold text-slate-100 hover:border-sky-500/70 hover:bg-slate-900/90"
+                >
+                  Rules
+                </motion.button>
+              </Link>
+            </div>
+          </motion.div>
+        </main>
+
+        {/* Footer nempel bawah */}
+        <footer className="mt-auto border-t border-white/5 py-5 text-center text-xs sm:text-sm text-slate-400 bg-slate-950/70 backdrop-blur-sm">
+          <p className="mb-1">
             Built with{" "}
-            <a
-              href="https://nextjs.org/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold hover:underline"
-            >
-              Next.js
-            </a>
-            ,{" "}
-            <a
-              href="https://tailwindcss.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold hover:underline"
-            >
-              TailwindCSS
-            </a>
-            ,{" "}
-            <a
-              href="https://www.framer.com/motion/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold hover:underline"
-            >
-              Framer Motion
-            </a>
-            , and hosted with{" "}
-            <a
-              href="https://supabase.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold hover:underline"
-            >
-              Supabase
-            </a>{" "}
-            and{" "}
-            <a
-              href="https://vercel.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold hover:underline"
-            >
-              Vercel
-            </a>
-            .
+            <span className="font-semibold text-sky-300">Next.js</span>,{" "}
+            <span className="font-semibold text-sky-300">TailwindCSS</span>,{" "}
+            <span className="font-semibold text-sky-300">Framer Motion</span>,
+            and powered by{" "}
+            <span className="font-semibold text-sky-300">Supabase</span> &{" "}
+            <span className="font-semibold text-sky-300">Vercel</span>.
           </p>
-          <p className="mt-1">
+          <p>
             Source code available on{" "}
             <a
-              className="text-orange-500 font-semibold hover:underline"
-              href={APP.links.github}
+              href="https://github.com/khoirulanam-dev/CTF-Polije"
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noreferrer"
+              className="underline decoration-sky-400/70 hover:text-sky-200"
             >
-              Github
+              GitHub
             </a>
-            , ©{APP.year} {APP.shortName}. All rights reserved.
+            . ©2025 POLIJE CTF. All rights reserved.
           </p>
-        </div>
-      </footer> */}
+        </footer>
+      </div>
     </div>
-  )
+  );
 }
