@@ -1,3 +1,4 @@
+// src/app/register/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,6 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import Loader from "@/components/custom/loading";
 import GoogleLoginButton from "@/components/GoogleLoginButton";
 
+const EXPECTED_TOKEN = "Hacker_Polije_2025"; // hanya untuk UX, tetap ada cek di server
+
 export default function RegisterPage() {
   const router = useRouter();
   const { setUser, user, loading: authLoading } = useAuth();
@@ -18,6 +21,7 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
+    teamToken: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -52,11 +56,19 @@ export default function RegisterPage() {
       return;
     }
 
+    // 🔑 simple client-side check (biar user ga salah ketik)
+    if (formData.teamToken.trim() !== EXPECTED_TOKEN) {
+      setError("Invalid team token");
+      setLoading(false);
+      return;
+    }
+
     try {
       const { user, error } = await signUp(
         formData.email,
         formData.password,
-        formData.username
+        formData.username,
+        formData.teamToken.trim()
       );
 
       if (error) {
@@ -113,6 +125,7 @@ export default function RegisterPage() {
 
             <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-3">
+                {/* username */}
                 <div className="relative">
                   <input
                     id="username"
@@ -142,6 +155,7 @@ export default function RegisterPage() {
                   </span>
                 </div>
 
+                {/* email */}
                 <div className="relative">
                   <input
                     id="email"
@@ -167,6 +181,7 @@ export default function RegisterPage() {
                   </span>
                 </div>
 
+                {/* password */}
                 <div className="relative">
                   <input
                     id="password"
@@ -196,6 +211,7 @@ export default function RegisterPage() {
                   </span>
                 </div>
 
+                {/* confirm password */}
                 <div className="relative">
                   <input
                     id="confirmPassword"
@@ -217,6 +233,31 @@ export default function RegisterPage() {
                       fill="currentColor"
                     >
                       <path d="M12 1.5a5.25 5.25 0 00-5.25 5.25V9A2.25 2.25 0 004.5 11.25v6A2.25 2.25 0 006.75 19.5h10.5A2.25 2.25 0 0019.5 17.25v-6A2.25 2.25 0 0017.25 9V6.75A5.25 5.25 0 0012 1.5zM9 9V6.75a3 3 0 116 0V9H9z" />
+                    </svg>
+                  </span>
+                </div>
+
+                {/* 🔑 Team Token */}
+                <div className="relative">
+                  <input
+                    id="teamToken"
+                    name="teamToken"
+                    type="text"
+                    required
+                    placeholder="Team token"
+                    className="w-full rounded-xl border border-white/5 bg-slate-950/40 px-10 py-2.5 text-sm text-white outline-none focus:border-blue-400/80 focus:ring-2 focus:ring-blue-400/40"
+                    value={formData.teamToken}
+                    onChange={handleChange}
+                  />
+                  <span className="pointer-events-none absolute left-3 top-2.5 text-slate-500">
+                    {/* icon key */}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M18 8a6 6 0 11-11.473 2.09L2 14.586V18h3.414l1.879-1.879A6 6 0 0118 8z" />
                     </svg>
                   </span>
                 </div>

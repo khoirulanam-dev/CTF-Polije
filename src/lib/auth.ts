@@ -1,9 +1,10 @@
-import { supabase } from './supabase'
-import { User } from '@/types'
+// src/lib/auth.ts
+import { supabase } from "./supabase";
+import { User } from "@/types";
 
 export interface AuthResponse {
-  user: User | null
-  error: string | null
+  user: User | null;
+  error: string | null;
 }
 
 /**
@@ -11,154 +12,166 @@ export interface AuthResponse {
  */
 export async function loginGoogle(): Promise<AuthResponse> {
   try {
-    const redirectUrl = `${window.location.origin}/challenges`
+    const redirectUrl = `${window.location.origin}/challenges`;
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider: "google",
       options: {
         redirectTo: redirectUrl,
       },
-    })
+    });
 
     if (error) {
-      return { user: null, error: error.message }
+      return { user: null, error: error.message };
     }
-    return { user: null, error: null }
+    return { user: null, error: null };
   } catch (error) {
-    return { user: null, error: 'Google sign-in failed' }
+    return { user: null, error: "Google sign-in failed" };
   }
 }
 
 /**
  * Send password reset email
  */
-export async function sendPasswordReset(email: string): Promise<{ error: string | null }> {
+export async function sendPasswordReset(
+  email: string
+): Promise<{ error: string | null }> {
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/challenges`
-    })
+      redirectTo: `${window.location.origin}/challenges`,
+    });
     if (error) {
-      return { error: error.message }
+      return { error: error.message };
     }
-    return { error: null }
+    return { error: null };
   } catch (error) {
-    return { error: 'Failed to send reset email' }
+    return { error: "Failed to send reset email" };
   }
 }
 
 /**
  * Update current user's password
  */
-export async function updatePassword(newPassword: string): Promise<{ error: string | null }> {
+export async function updatePassword(
+  newPassword: string
+): Promise<{ error: string | null }> {
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
     if (userError || !user) {
-      return { error: 'User not authenticated' }
+      return { error: "User not authenticated" };
     }
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
-      return { error: error.message }
+      return { error: error.message };
     }
-    return { error: null }
+    return { error: null };
   } catch (error) {
-    return { error: 'Failed to update password' }
+    return { error: "Failed to update password" };
   }
 }
 
 /**
  * Register a new user
+ * - Cek allowed email domain (client)
+ * - Kirim ke /api/register untuk cek team token (server)
  */
-export async function signUp(email: string, password: string, username: string): Promise<AuthResponse> {
+export async function signUp(
+  email: string,
+  password: string,
+  username: string,
+  teamToken: string
+): Promise<AuthResponse> {
   try {
-    // ✅ allow 3 domains
+    // ✅ allowed domain (seperti sebelumnya)
     const allowedDomains = [
-      '@gmail.com',
-      '@student.polije.ac.id',
-      '@polije.ac.id',
-    ]
-    const lowerEmail = email.toLowerCase()
-    const allowed = allowedDomains.some((d) => lowerEmail.endsWith(d))
+      "@gmail.com",
+      "@student.polije.ac.id",
+      "@polije.ac.id",
+    ];
+    const lowerEmail = email.toLowerCase();
+    const allowed = allowedDomains.some((d) => lowerEmail.endsWith(d));
 
     if (!allowed) {
       return {
         user: null,
-        error: 'Email is not allowed'
-      }
+        error: "Email is not allowed",
+      };
     }
 
-    // Check username in public.users
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', username)
-      .single();
-
-    if (existingUser) {
-      return { user: null, error: 'Username already taken' };
-    }
-
-    // Sign up with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          // username,
-          // display_name: username
-        }
-      }
-    })
-
-    if (authError?.message === 'User already registered') {
-      return { user: null, error: "Email already registered" }
-    }
-    if (authError) {
-      return { user: null, error: authError.message }
-    }
-
-    if (!authData.user) {
-      return { user: null, error: 'Failed to create account' }
-    }
-
-    // Create user profile via RPC
-    const { error: rpcError } = await supabase.rpc('create_profile', {
-      p_id: authData.user.id,
-      p_username: username
+    // ✅ panggil API /api/register (server yang cek REGISTER_TOKEN & bikin akun)
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+        username,
+        team_token: teamToken,
+      }),
     });
 
-    if (rpcError) {
-      console.error('User creation error:', rpcError)
-      return { user: null, error: `Failed to create user profile: ${rpcError.message}` }
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      return {
+        user: null,
+        error: data?.message ?? "Registration failed",
+      };
     }
 
-    // Fetch user data from the users table
+    // optional: auto-login setelah register
+    const { data: signInData, error: signInError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    if (signInError || !signInData.user) {
+      // akun sudah kepake, tapi auto login gagal → biarin, user login manual
+      return { user: null, error: null };
+    }
+
+    // ambil profile dari public.users
     const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
+      .from("users")
+      .select("*")
+      .eq("id", signInData.user.id)
       .single();
 
-    if (userError) {
-      return { user: null, error: userError.message };
+    if (userError || !userData) {
+      return { user: null, error: null };
     }
 
     return { user: userData, error: null };
   } catch (error) {
-    return { user: null, error: 'Registration failed' }
+    console.error("signUp error:", error);
+    return { user: null, error: "Registration failed" };
   }
 }
 
-export async function signIn(identifier: string, password: string): Promise<AuthResponse> {
+/**
+ * Login (email atau username)
+ */
+export async function signIn(
+  identifier: string,
+  password: string
+): Promise<AuthResponse> {
   try {
     let email = identifier;
 
-    // If identifier is not an email, treat it as username → fetch email via RPC
-    if (!identifier.includes('@')) {
-      const { data: rpcEmail, error: rpcError } = await supabase.rpc('get_email_by_username', {
-        p_username: identifier
-      });
+    // Kalau bukan email → anggap username, ambil email via RPC
+    if (!identifier.includes("@")) {
+      const { data: rpcEmail, error: rpcError } = await supabase.rpc(
+        "get_email_by_username",
+        {
+          p_username: identifier,
+        }
+      );
 
       if (rpcError || !rpcEmail) {
-        return { user: null, error: 'User not found' };
+        return { user: null, error: "User not found" };
       }
 
       email = rpcEmail;
@@ -174,37 +187,38 @@ export async function signIn(identifier: string, password: string): Promise<Auth
     }
 
     if (!data.user) {
-      return { user: null, error: 'Login failed' };
+      return { user: null, error: "Login failed" };
     }
 
-    // Try to fetch from public.users
+    // Ambil dari public.users
     let { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id)
+      .from("users")
+      .select("*")
+      .eq("id", data.user.id)
       .single();
 
     if (userError || !userData) {
-      // Auto-create profile if it doesn't exist
+      // Auto-create profile kalau belum ada
       const username =
         data.user.user_metadata?.username ??
-        (data.user.email ? data.user.email.split("@")[0] : "user_" + data.user.id.substring(0, 8));
+        (data.user.email
+          ? data.user.email.split("@")[0]
+          : "user_" + data.user.id.substring(0, 8));
 
-      const { error: rpcError } = await supabase.rpc('create_profile', {
+      const { error: rpcError } = await supabase.rpc("create_profile", {
         p_id: data.user.id,
-        p_username: username
+        p_username: username,
       });
 
       if (rpcError) {
         console.error("Auto create_profile error:", rpcError);
-        return { user: null, error: 'Failed to create user profile' };
+        return { user: null, error: "Failed to create user profile" };
       }
 
-      // Fetch again
       const { data: newUserData, error: newUserError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', data.user.id)
+        .from("users")
+        .select("*")
+        .eq("id", data.user.id)
         .single();
 
       if (newUserError) {
@@ -216,7 +230,7 @@ export async function signIn(identifier: string, password: string): Promise<Auth
 
     return { user: userData, error: null };
   } catch (error) {
-    return { user: null, error: 'Login failed' };
+    return { user: null, error: "Login failed" };
   }
 }
 
@@ -224,7 +238,7 @@ export async function signIn(identifier: string, password: string): Promise<Auth
  * Sign out user
  */
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut()
+  await supabase.auth.signOut();
 }
 
 /**
@@ -232,28 +246,37 @@ export async function signOut(): Promise<void> {
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
 
     // Fetch user profile via RPC
-    let { data, error } = await supabase.rpc('get_user_profile', { p_id: user.id });
+    let { data, error } = await supabase.rpc("get_user_profile", {
+      p_id: user.id,
+    });
     let userData = data && data.length > 0 ? data[0] : null;
 
-    // If not present, auto-create profile (e.g., Google login)
+    // Kalau belum ada profile (misal Google login pertama kali) → buat
     if (!userData) {
       const username =
         user.user_metadata?.username ||
-        (user.email ? user.email.split("@")[0] : "user_" + user.id.substring(0, 8));
+        (user.email
+          ? user.email.split("@")[0]
+          : "user_" + user.id.substring(0, 8));
 
-      const { error: rpcError } = await supabase.rpc('create_profile', {
+      const { error: rpcError } = await supabase.rpc("create_profile", {
         p_id: user.id,
-        p_username: username
+        p_username: username,
       });
       if (rpcError) {
         console.error("Auto create_profile error:", rpcError);
         return null;
       }
-      const { data: newData, error: newError } = await supabase.rpc('get_user_profile', { p_id: user.id });
+      const { data: newData, error: newError } = await supabase.rpc(
+        "get_user_profile",
+        { p_id: user.id }
+      );
       userData = newData && newData.length > 0 ? newData[0] : null;
       if (newError || !userData) {
         return null;
@@ -271,14 +294,14 @@ export async function getCurrentUser(): Promise<User | null> {
  */
 export async function isAdmin(): Promise<boolean> {
   try {
-    const { data, error } = await supabase.rpc('is_admin');
+    const { data, error } = await supabase.rpc("is_admin");
     if (error) {
-      console.error('Error checking admin status:', error);
+      console.error("Error checking admin status:", error);
       return false;
     }
     return data || false;
   } catch (error) {
-    console.error('Error checking admin status:', error);
+    console.error("Error checking admin status:", error);
     return false;
   }
 }

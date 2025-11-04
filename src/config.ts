@@ -1,7 +1,7 @@
 export const APP = {
   shortName: 'POLIJE CTF',
   fullName: 'POLIJE CTF Platform',
-  description: 'Aplikasi CTF minimalis dengan Next.js dan Supabase',
+  description: 'Platform Internal CTF POLIJE',
   flagFormat: 'POLIJE{your_flag_here}',
   year: new Date().getFullYear(),
   challengeCategories: [
