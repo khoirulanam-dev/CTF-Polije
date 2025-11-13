@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Loader from "@/components/custom/loading";
 import GoogleLoginButton from "@/components/GoogleLoginButton";
 
-const EXPECTED_TOKEN = "Hacker_Polije_2025"; // hanya untuk UX, tetap ada cek di server
+const EXPECTED_TOKEN = "JANGANDISEBAR!!!"; // hanya untuk UX, tetap ada cek di server
 
 export default function RegisterPage() {
   const router = useRouter();
