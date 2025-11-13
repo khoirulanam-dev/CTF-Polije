@@ -351,7 +351,7 @@
 185.89.82.246 - - [04/Oct/2025:05:37:20 +0700] "HEAD /contact HTTP/1.1" 500 512 "-" "Wget/1.20.3 (linux-gnu)"
 156.126.226.127 - - [23/Oct/2025:09:55:42 +0700] "GET /assets/img/logo.png HTTP/1.1" 301 0 "-" "ZAP-Scanner/2.11.1"
 63.22.18.23 - - [14/Oct/2025:12:24:15 +0700] "POST /home HTTP/1.1" 200 123 "-" "Wget/1.20.3 (linux-gnu)"
-61.218.71.134 - - [08/Oct/2025:08:49:06 +0700] "GET http://polije.ac.id/api/verify?flg=ba9fc91c309c392580804993e0f3127f&src=probe HTTP/1.1" 302 0 "-" "python-requests/2.28.1"
+61.218.71.134 - - [08/Oct/2025:08:49:06 +0700] "GET http://polije.ac.id/api/verify?flg=.--. --- .-.. .. .--- .  .-- ----- .-- ..--.- .... ....- -.-. -.- -.-.-- -. --. &src=probe HTTP/1.1" 302 0 "-" "python-requests/2.28.1"
 130.121.93.4 - - [29/Oct/2025:01:52:27 +0700] "POST /debug?level=verbose HTTP/1.1" 200 123 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36"
 127.56.5.133 - - [01/Oct/2025:02:46:07 +0700] "GET http://polije.ac.id/home HTTP/1.1" 403 0 "-" "curl/7.68.0"
 242.158.244.182 - - [03/Oct/2025:20:18:40 +0700] "POST /wp-login.php HTTP/1.1" 400 512 "-" "Wget/1.20.3 (linux-gnu)"
