@@ -70,7 +70,7 @@ export default function HomePage() {
           </motion.div>
         </main>
 
-        {/* Footer nempel bawah */}
+        {/* Footer */}
         <footer className="mt-auto border-t border-white/5 py-5 text-center text-xs sm:text-sm text-slate-400 bg-slate-950/70 backdrop-blur-sm">
           <p className="mb-1">
             Built with{" "}
