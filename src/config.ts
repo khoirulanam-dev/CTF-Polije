@@ -14,6 +14,7 @@ export const APP = {
     'Reverse',
     'Network',
     'Blockchain',
+    'Binary Exploitation'
   ],
   links: {
     github: 'https://github.com/Anam1602',
