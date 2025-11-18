@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
+import { ReducedMotionProvider } from "@/contexts/ReducedMotionContext";
 import APP from "@/config";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -112,7 +113,6 @@ export const metadata: Metadata = {
     canonical: APP.baseUrl,
   },
   other: {
-    // Structured data biar Google bisa detect
     "application/ld+json": JSON.stringify({
       "@context": "https://schema.org",
       "@type": "WebSite",
@@ -140,11 +140,14 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <NotificationsProvider>
-              <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-                <Navbar />
-                <div className="pt-14">{children}</div>
-                <Toaster position="top-right" reverseOrder={false} />
-              </div>
+              <ReducedMotionProvider>
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+                  <Navbar />
+                  <div className="pt-14">{children}</div>
+                  <Toaster position="top-right" reverseOrder={false} />
+                  <Analytics />
+                </div>
+              </ReducedMotionProvider>
             </NotificationsProvider>
           </AuthProvider>
         </ThemeProvider>
