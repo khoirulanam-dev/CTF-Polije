@@ -17,22 +17,27 @@
 }
 
 body {
-  font-family: 'Fira Mono', 'JetBrains Mono', 'Menlo', 'monospace';
+  font-family: "Fira Mono", "JetBrains Mono", "Menlo", "monospace";
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(to bottom,
+  background: linear-gradient(
+      to bottom,
       transparent,
-      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
 }
 
 .bg-ctfd {
-  background: repeating-linear-gradient(0deg,
-      #181829,
-      #181829 2px,
-      #1a1a2e 2px,
-      #1a1a2e 4px);
+  background: repeating-linear-gradient(
+    0deg,
+    #181829,
+    #181829 2px,
+    #1a1a2e 2px,
+    #1a1a2e 4px
+  );
 }
 
 code {
@@ -42,7 +47,7 @@ code {
   /* warna pink/ungu, sesuaikan tema */
   border-radius: 4px;
   padding: 2px 6px;
-  font-family: 'Fira Mono', 'Consolas', monospace;
+  font-family: "Fira Mono", "Consolas", monospace;
   font-size: 0.95em;
 }
 
@@ -218,7 +223,6 @@ select {
   }
 }
 
-
 /* tmp */
 /* Light mode */
 *::-webkit-scrollbar-thumb {
@@ -228,4 +232,11 @@ select {
 /* Dark mode */
 .dark *::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.2);
+}
+
+html.reduced-motion,
+html.reduced-motion * {
+  scroll-behavior: auto !important;
+  animation: none !important;
+  transition: none !important;
 }

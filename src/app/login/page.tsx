@@ -8,10 +8,14 @@ import { signIn } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import Loader from "@/components/custom/loading";
 import GoogleLoginButton from "@/components/GoogleLoginButton";
+import { useReducedMotion } from "@/contexts/ReducedMotionContext";
+import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 
 export default function LoginPage() {
   const router = useRouter();
   const { setUser, user, loading: authLoading } = useAuth();
+  const { reducedMotion } = useReducedMotion();
+
   const [formData, setFormData] = useState({ identifier: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -59,16 +63,27 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute -bottom-40 right-0 h-80 w-80 rounded-full bg-indigo-500/10 blur-3xl" />
 
       <div className="relative flex min-h-[calc(100vh-64px)] items-center justify-center px-4 py-10">
+        {/* toggle reduced motion */}
+        <div className="absolute top-4 right-4 z-20">
+          <ReducedMotionToggle />
+        </div>
+
         {/* === WRAPPER DENGAN CAHAYA MUTER === */}
         <div className="relative w-full max-w-md">
-          {/* cincin muter */}
-          <div className="pointer-events-none absolute -inset-[2px] rounded-[32px] bg-[conic-gradient(from_0deg,_rgba(59,130,246,0.0)_0deg,_rgba(59,130,246,0.6)_120deg,_rgba(14,165,233,0.0)_240deg,_rgba(59,130,246,0.0)_360deg)] opacity-80 animate-spin-slow blur-[3px]" />
+          {/* cincin muter (dimatikan kalau reducedMotion) */}
+          {!reducedMotion && (
+            <div className="pointer-events-none absolute -inset-[2px] rounded-[32px] bg-[conic-gradient(from_0deg,_rgba(59,130,246,0.0)_0deg,_rgba(59,130,246,0.6)_120deg,_rgba(14,165,233,0.0)_240deg,_rgba(59,130,246,0.0)_360deg)] opacity-80 animate-spin-slow blur-[3px]" />
+          )}
 
           {/* card asli */}
           <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
+            {...(!reducedMotion
+              ? {
+                  initial: { opacity: 0, y: 22 },
+                  animate: { opacity: 1, y: 0 },
+                  transition: { duration: 0.45, ease: "easeOut" },
+                }
+              : {})}
             className="relative rounded-[30px] border border-white/5 bg-slate-900/70 p-8 shadow-[0_18px_55px_rgba(0,0,0,0.35)] backdrop-blur-md"
           >
             <h2 className="text-center text-3xl font-extrabold text-white">
@@ -162,8 +177,12 @@ export default function LoginPage() {
               </div>
 
               <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.997 }}
+                {...(!reducedMotion
+                  ? {
+                      whileHover: { scale: 1.01 },
+                      whileTap: { scale: 0.997 },
+                    }
+                  : {})}
                 type="submit"
                 disabled={loading}
                 className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-blue-500 to-sky-400 py-2.5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(56,189,248,0.3)] transition disabled:opacity-60"

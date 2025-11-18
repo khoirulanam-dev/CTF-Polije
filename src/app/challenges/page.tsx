@@ -18,10 +18,13 @@ import { Solver } from "@/components/challenges/SolversList";
 import ChallengeFilterBar from "@/components/challenges/ChallengeFilterBar";
 import APP from "@/config";
 import { useAuth } from "@/contexts/AuthContext";
+import { useReducedMotion } from "@/contexts/ReducedMotionContext";
+import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 
 export default function ChallengesPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { reducedMotion } = useReducedMotion();
 
   const [challengeTab, setChallengeTab] = useState<"challenge" | "solvers">(
     "challenge"
@@ -145,27 +148,29 @@ export default function ChallengesPage() {
         audio.volume = 0.3;
         audio.play().catch(() => {});
 
-        // confetti
-        import("canvas-confetti").then((confetti) => {
-          const duration = 800;
-          const end = Date.now() + duration;
+        // confetti dimatikan kalau reducedMotion = true
+        if (!reducedMotion) {
+          import("canvas-confetti").then((confetti) => {
+            const duration = 800;
+            const end = Date.now() + duration;
 
-          const frame = () => {
-            confetti.default({
-              particleCount: 3,
-              startVelocity: 20,
-              spread: 360,
-              ticks: 80,
-              gravity: 0.8,
-              scalar: 0.8,
-              colors: ["#00e0ff", "#ffffff", "#ff7b00"],
-              origin: { x: Math.random(), y: Math.random() - 0.2 },
-            });
-            if (Date.now() < end) requestAnimationFrame(frame);
-          };
+            const frame = () => {
+              confetti.default({
+                particleCount: 3,
+                startVelocity: 20,
+                spread: 360,
+                ticks: 80,
+                gravity: 0.8,
+                scalar: 0.8,
+                colors: ["#00e0ff", "#ffffff", "#ff7b00"],
+                origin: { x: Math.random(), y: Math.random() - 0.2 },
+              });
+              if (Date.now() < end) requestAnimationFrame(frame);
+            };
 
-          frame();
-        });
+            frame();
+          });
+        }
 
         setFlagInputs((prev) => ({ ...prev, [challengeId]: "" }));
       }
@@ -300,72 +305,81 @@ export default function ChallengesPage() {
   if (loading) return <Loader fullscreen color="text-orange-500" />;
   if (!user) return null;
 
+  // wrapper untuk section & card (kalau reducedMotion → pakai div biasa)
+  const Section: any = reducedMotion ? "div" : motion.div;
+  const CardWrapper: any = reducedMotion ? "div" : motion.div;
+
   return (
     <div className="relative min-h-screen pt-5 overflow-hidden">
-      {/* 1) gradient dinamis */}
-      <motion.div
-        aria-hidden
-        className="fixed inset-0 -z-30 bg-[radial-gradient(ellipse_at_top_left,_#0ea5e9_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_#4f46e5_0%,_transparent_55%)] blur-3xl"
-        animate={{
-          backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
-        }}
-        transition={{
-          duration: 25,
-          repeat: Infinity,
-          ease: "linear",
-        }}
-      />
-
-      {/* 2) glow stream */}
-      <motion.div
-        aria-hidden
-        className="fixed inset-0 -z-20 opacity-20 bg-[repeating-linear-gradient(180deg,_rgba(148,163,184,0.12)_0px,_rgba(148,163,184,0.12)_2px,_transparent_2px,_transparent_6px)]"
-        animate={{
-          backgroundPositionY: ["0%", "100%"],
-        }}
-        transition={{
-          duration: 13,
-          repeat: Infinity,
-          ease: "linear",
-        }}
-      />
-
-      {/* 3) partikel */}
-      <motion.div
-        aria-hidden
-        className="fixed inset-0 -z-10 pointer-events-none"
-        animate={{
-          opacity: [0.3, 0.7, 0.3],
-        }}
-        transition={{
-          duration: 7,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      >
-        {particles.map((p, i) => (
+      {/* background dinamis dimatikan kalau reducedMotion */}
+      {!reducedMotion && (
+        <>
+          {/* 1) gradient dinamis */}
           <motion.div
-            key={i}
-            className="absolute rounded-full bg-cyan-200/40"
-            style={{
-              top: p.top,
-              left: p.left,
-              width: p.size,
-              height: p.size,
-            }}
+            aria-hidden
+            className="fixed inset-0 -z-30 bg-[radial-gradient(ellipse_at_top_left,_#0ea5e9_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_#4f46e5_0%,_transparent_55%)] blur-3xl"
             animate={{
-              y: [0, -8, 0],
-              opacity: [0.2, 1, 0.2],
+              backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
             }}
             transition={{
-              duration: p.duration,
+              duration: 25,
               repeat: Infinity,
-              ease: "easeInOut",
-              delay: i * 0.13,
+              ease: "linear",
             }}
           />
-        ))}
-      </motion.div>
+
+          {/* 2) glow stream */}
+          <motion.div
+            aria-hidden
+            className="fixed inset-0 -z-20 opacity-20 bg-[repeating-linear-gradient(180deg,_rgba(148,163,184,0.12)_0px,_rgba(148,163,184,0.12)_2px,_transparent_2px,_transparent_6px)]"
+            animate={{
+              backgroundPositionY: ["0%", "100%"],
+            }}
+            transition={{
+              duration: 13,
+              repeat: Infinity,
+              ease: "linear",
+            }}
+          />
+
+          {/* 3) partikel */}
+          <motion.div
+            aria-hidden
+            className="fixed inset-0 -z-10 pointer-events-none"
+            animate={{
+              opacity: [0.3, 0.7, 0.3],
+            }}
+            transition={{
+              duration: 7,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          >
+            {particles.map((p, i) => (
+              <motion.div
+                key={i}
+                className="absolute rounded-full bg-cyan-200/40"
+                style={{
+                  top: p.top,
+                  left: p.left,
+                  width: p.size,
+                  height: p.size,
+                }}
+                animate={{
+                  y: [0, -8, 0],
+                  opacity: [0.2, 1, 0.2],
+                }}
+                transition={{
+                  duration: p.duration,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  delay: i * 0.13,
+                }}
+              />
+            ))}
+          </motion.div>
+        </>
+      )}
 
       {/* style scrollbar */}
       <style jsx global>{`
@@ -390,7 +404,8 @@ export default function ChallengesPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <TitlePage>🚩 challenges</TitlePage>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            <ReducedMotionToggle />
             <div className="rounded-2xl bg-slate-900/40 border border-slate-700/70 px-4 py-2 text-sm text-slate-100">
               Total chall:{" "}
               <span className="font-semibold">{challenges.length}</span>
@@ -443,11 +458,15 @@ export default function ChallengesPage() {
             </div>
           ) : (
             orderedKeys.map((category, idx) => (
-              <motion.div
+              <Section
                 key={category}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: idx * 0.04 }}
+                {...(!reducedMotion
+                  ? {
+                      initial: { opacity: 0, y: 16 },
+                      animate: { opacity: 1, y: 0 },
+                      transition: { duration: 0.35, delay: idx * 0.04 },
+                    }
+                  : {})}
                 className="space-y-3"
               >
                 {/* judul kategori */}
@@ -464,23 +483,27 @@ export default function ChallengesPage() {
                 {/* grid challenge */}
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                   {grouped[category].map((challenge) => (
-                    <motion.div
+                    <CardWrapper
                       key={challenge.id}
-                      whileHover={{ y: -5, scale: 1.02 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 240,
-                        damping: 18,
-                      }}
+                      {...(!reducedMotion
+                        ? {
+                            whileHover: { y: -5, scale: 1.02 },
+                            transition: {
+                              type: "spring",
+                              stiffness: 240,
+                              damping: 18,
+                            },
+                          }
+                        : {})}
                     >
                       <ChallengeCard
                         challenge={challenge}
                         onClick={() => setSelectedChallenge(challenge)}
                       />
-                    </motion.div>
+                    </CardWrapper>
                   ))}
                 </div>
-              </motion.div>
+              </Section>
             ))
           )}
         </div>
