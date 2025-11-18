@@ -1,4 +1,3 @@
-// src/contexts/ReducedMotionContext.tsx
 "use client";
 
 import {
@@ -82,12 +81,18 @@ export function ReducedMotionProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useReducedMotion() {
+export function useReducedMotion(): ReducedMotionContextType {
   const ctx = useContext(ReducedMotionContext);
+
+  // Fallback aman kalau (entah kenapa) dipakai di luar provider saat build
   if (!ctx) {
-    throw new Error(
-      "useReducedMotion must be used inside ReducedMotionProvider"
-    );
+    return {
+      reducedMotion: false,
+      toggleReducedMotion: () => {
+        // no-op
+      },
+    };
   }
+
   return ctx;
 }
