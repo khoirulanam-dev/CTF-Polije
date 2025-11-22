@@ -127,8 +127,8 @@ export async function addChallenge(challengeData: {
       p_hint: hintValue,
       p_attachments: challengeData.attachments || [],
       p_is_dynamic: challengeData.is_dynamic,
-      p_min_points: challengeData.min_points ?? 0,
-      p_decay_per_solve: challengeData.decay_per_solve ?? 0
+      p_min_points: challengeData.min_points ,
+      p_decay_per_solve: challengeData.decay_per_solve
     });
     if (error) {
       throw new Error(error.message)
