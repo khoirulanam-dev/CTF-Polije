@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { fetchMessages, sendMessage } from "@/lib/livechat";
-import { X, MessageSquare, Trash2 } from "lucide-react";
+import { X, MessageSquare, Trash2, Reply } from "lucide-react";
 import clsx from "clsx";
 
 type Msg = {
@@ -14,6 +14,11 @@ type Msg = {
   sender_name?: string | null;
   content: string;
   created_at: string;
+
+  // reply optional fields (kalau kolom ada di DB)
+  reply_to_id?: number | null;
+  reply_to_name?: string | null;
+  reply_to_content?: string | null;
 };
 
 type PresenceUser = {
@@ -45,6 +50,9 @@ export default function LiveChatWidget() {
 
   const [notice, setNotice] = useState<string | null>(null);
 
+  // reply state
+  const [replyTo, setReplyTo] = useState<Msg | null>(null);
+
   // ---------- refs ----------
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
@@ -64,7 +72,6 @@ export default function LiveChatWidget() {
   }
 
   function escapeHtml(input: string) {
-    // kompatibel TS < ES2021 (no replaceAll)
     return input
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -80,7 +87,6 @@ export default function LiveChatWidget() {
 
   function getNameKey(uid: string) {
     return `global_chat_name_${uid}`;
-    // per-user key => tiap akun wajib input nama sendiri
   }
 
   function saveName() {
@@ -96,6 +102,12 @@ export default function LiveChatWidget() {
     localStorage.removeItem(getNameKey(userId));
     setName("");
     setNameReady(false);
+    setReplyTo(null);
+  }
+
+  function truncate(s: string, n = 80) {
+    const t = (s || "").replace(/\s+/g, " ").trim();
+    return t.length > n ? t.slice(0, n) + "…" : t;
   }
 
   // ---------- derived ----------
@@ -160,7 +172,6 @@ export default function LiveChatWidget() {
       setName(saved);
       setNameReady(true);
     } else {
-      // user baru / belum isi nama => wajib isi lagi
       setName("");
       setNameReady(false);
     }
@@ -170,7 +181,7 @@ export default function LiveChatWidget() {
   useEffect(() => {
     if (!open) return;
     fetchMessages()
-      .then((data: Msg[] | null) => setMsgs((data || []) as Msg[]))
+      .then((data) => setMsgs((data || []) as unknown as Msg[]))
       .catch(() => setMsgs([]));
   }, [open]);
 
@@ -308,6 +319,18 @@ export default function LiveChatWidget() {
     };
   }, [userId, nameReady, name, isAdmin]);
 
+  // update presence name kalau user ganti nama
+  useEffect(() => {
+    if (!presenceChannelRef.current || !userId) return;
+    presenceChannelRef.current.track({
+      id: userId,
+      name: nameReady ? name : "User",
+      role: isAdmin ? "admin" : "user",
+      typing: false,
+      lastTypingAt: Date.now(),
+    });
+  }, [nameReady, name, isAdmin, userId]);
+
   // ---------- autoscroll ----------
   useEffect(() => {
     if (!open) return;
@@ -369,13 +392,25 @@ export default function LiveChatWidget() {
     lastMsgRef.current = cleaned;
 
     try {
-      await sendMessage(
+      await (sendMessage as any)(
         userId,
         isAdmin ? "admin" : "user",
         name.trim(),
-        cleaned
+        cleaned,
+        replyTo
+          ? {
+              reply_to_id: replyTo.id,
+              reply_to_name:
+                replyTo.sender_role === "admin"
+                  ? "Admin"
+                  : replyTo.sender_name || "User",
+              reply_to_content: truncate(replyTo.content, 120),
+            }
+          : null
       );
+
       setText("");
+      setReplyTo(null);
       emitTyping(false);
     } catch {
       showNotice("Gagal mengirim pesan.");
@@ -392,7 +427,7 @@ export default function LiveChatWidget() {
     }
   }
 
-  // Chat hanya untuk user login (return setelah SEMUA hooks)
+  // Chat hanya untuk user login
   if (!userId) return null;
 
   return (
@@ -511,6 +546,18 @@ export default function LiveChatWidget() {
                           : m.sender_name || "User"}
                       </div>
 
+                      {/* reply preview inside bubble */}
+                      {m.reply_to_id && (
+                        <div className="mb-2 rounded-xl bg-black/25 px-2 py-1.5 text-[11px] border border-white/10">
+                          <div className="opacity-80 font-semibold">
+                            Reply to {m.reply_to_name || "User"}
+                          </div>
+                          <div className="opacity-70">
+                            {m.reply_to_content || "(pesan)"}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="whitespace-pre-wrap break-words">
                         {m.content}
                       </div>
@@ -520,16 +567,31 @@ export default function LiveChatWidget() {
                       </div>
                     </div>
 
-                    {/* Admin moderation: delete */}
-                    {isAdmin && (
+                    {/* Actions */}
+                    <div className="mb-1 flex items-center gap-1">
+                      {/* Reply button (all users) */}
                       <button
-                        onClick={() => onDeleteMessage(m.id)}
-                        className="mb-1 hidden rounded-lg bg-red-500/15 p-1 text-red-300 hover:bg-red-500/30 group-hover:inline-flex"
-                        title="Hapus pesan"
+                        onClick={() => {
+                          setReplyTo(m);
+                          setOpen(true);
+                        }}
+                        className="hidden rounded-lg bg-white/10 p-1 text-white/70 hover:bg-white/20 hover:text-white group-hover:inline-flex"
+                        title="Reply"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Reply className="h-4 w-4" />
                       </button>
-                    )}
+
+                      {/* Admin delete */}
+                      {isAdmin && (
+                        <button
+                          onClick={() => onDeleteMessage(m.id)}
+                          className="hidden rounded-lg bg-red-500/15 p-1 text-red-300 hover:bg-red-500/30 group-hover:inline-flex"
+                          title="Hapus pesan"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -544,21 +606,45 @@ export default function LiveChatWidget() {
               </div>
             )}
 
-            {/* ====== INPUT CHAT ====== */}
-            <div className="flex gap-2 border-t border-white/10 bg-zinc-900 p-2">
-              <input
-                className="flex-1 rounded-xl bg-zinc-800 px-3 py-2 text-white outline-none placeholder:text-white/40"
-                placeholder="Tulis pesan..."
-                value={text}
-                onChange={(e) => onTypeChange(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && onSend()}
-              />
-              <button
-                onClick={onSend}
-                className="rounded-xl bg-purple-600 px-4 py-2 text-white hover:bg-purple-700"
-              >
-                Kirim
-              </button>
+            {/* ====== REPLY BAR + INPUT CHAT ====== */}
+            <div className="border-t border-white/10 bg-zinc-900 p-2 space-y-2">
+              {replyTo && (
+                <div className="flex items-start justify-between gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs text-white">
+                  <div className="min-w-0">
+                    <div className="font-semibold opacity-90">
+                      Reply to{" "}
+                      {replyTo.sender_role === "admin"
+                        ? "Admin"
+                        : replyTo.sender_name || "User"}
+                    </div>
+                    <div className="opacity-70 truncate">
+                      {truncate(replyTo.content, 140)}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setReplyTo(null)}
+                    className="shrink-0 rounded-md bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20"
+                  >
+                    batal
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-xl bg-zinc-800 px-3 py-2 text-white outline-none placeholder:text-white/40"
+                  placeholder="Tulis pesan..."
+                  value={text}
+                  onChange={(e) => onTypeChange(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && onSend()}
+                />
+                <button
+                  onClick={onSend}
+                  className="rounded-xl bg-purple-600 px-4 py-2 text-white hover:bg-purple-700"
+                >
+                  Kirim
+                </button>
+              </div>
             </div>
           </>
         )}
