@@ -20,6 +20,7 @@ import APP from "@/config";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
+import LiveChatWidget from "@/components/livechat/LiveChatWidget";
 
 export default function ChallengesPage() {
   const router = useRouter();
@@ -538,6 +539,7 @@ export default function ChallengesPage() {
           setShowHintModal={setShowHintModal}
         />
       )}
+      <LiveChatWidget />
     </div>
   );
 }
