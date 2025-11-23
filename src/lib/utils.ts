@@ -7,9 +7,9 @@ export function cn(...inputs: ClassValue[]) {
 
 // Validasi username: max 30 karakter, tanpa emoji, tanpa karakter berbahaya, hanya huruf, angka, _ . -
 export function isValidUsername(username: string): string | null {
-  // Tidak boleh lebih dari 30 karakter
-  if (username.length > 40) {
-    return 'Username must be at most 30 characters.'
+  // Tidak boleh lebih dari 50 karakter
+  if (username.length > 50) {
+    return 'Username must be at most 50 characters.'
   }
   // Tidak boleh kurang dari 3 karakter
   if (username.length < 3) {
