@@ -20,6 +20,7 @@ import {
   Paperclip,
   Mic,
   StopCircle,
+  AtSign,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -27,7 +28,7 @@ type Msg = ChatMessage;
 
 type PresenceUser = {
   id: string;
-  name: string;
+  name: string; // sekarang ISINYA username
   role: "user" | "admin";
   typing?: boolean;
   lastTypingAt?: number;
@@ -42,6 +43,7 @@ type ReactionAgg = {
 type MentionUser = {
   id: string;
   username: string;
+  role: "user" | "admin" | string | null;
   is_admin: boolean;
 };
 
@@ -49,45 +51,42 @@ const CHAT_ROOM = "global";
 const COOLDOWN_MS = 1500;
 const MAX_LEN = 500;
 
-// emoji list sederhana (no lib)
 const EMOJIS = ["😂", "😮", "🔥", "❤️", "👍", "👎", "🎉", "🤯", "😡", "😢"];
 const QUICK_REACT = ["😂", "🔥", "❤️", "👍"];
 
+const lastReadKey = (uid: string) => `livechat:lastReadAt:${CHAT_ROOM}:${uid}`;
+
 export default function LiveChatWidget() {
-  // ---------- state ----------
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
 
   const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [username, setUsername] = useState<string>("User");
+  const [username, setUsername] = useState<string>("User"); // dipakai buat mention
 
   const [onlineMap, setOnlineMap] = useState<Record<string, PresenceUser>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
 
   const [notice, setNotice] = useState<string | null>(null);
 
-  // reply state
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
 
-  // emoji UI
   const [emojiOpen, setEmojiOpen] = useState(false);
 
-  // reactions map: message_id -> ReactionAgg[]
   const [reactionsMap, setReactionsMap] = useState<
     Record<number, ReactionAgg[]>
   >({});
 
-  // voice note
   const [recording, setRecording] = useState(false);
 
-  // mention users + UI
+  const [unread, setUnread] = useState(0);
+
   const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
 
-  // ---------- refs ----------
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const presenceChannelRef = useRef<any>(null);
@@ -103,7 +102,8 @@ export default function LiveChatWidget() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
 
-  // ---------- utils ----------
+  const lastReadAtRef = useRef<number>(0);
+
   function showNotice(msg: string) {
     setNotice(msg);
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
@@ -128,19 +128,14 @@ export default function LiveChatWidget() {
     return t.length > n ? t.slice(0, n) + "…" : t;
   }
 
-  // ambil token terakhir setelah spasi (untuk mention)
-  function getLastToken(value: string) {
-    const parts = value.split(/\s/);
-    return parts[parts.length - 1] || "";
+  function playMentionSound() {
+    try {
+      const audio = new Audio("/sounds/mention.mp3");
+      audio.volume = 0.35;
+      audio.play().catch(() => {});
+    } catch {}
   }
 
-  function replaceLastToken(value: string, newToken: string) {
-    const parts = value.split(/\s/);
-    parts[parts.length - 1] = newToken;
-    return parts.join(" ");
-  }
-
-  // ---------- derived ----------
   const onlineCount = useMemo(() => Object.keys(onlineMap).length, [onlineMap]);
 
   const typingLine = useMemo(() => {
@@ -154,12 +149,44 @@ export default function LiveChatWidget() {
     } sedang mengetik...`;
   }, [typingUsers]);
 
-  // helper online check (presence realtime)
-  function isUserOnline(uid: string) {
-    return !!onlineMap[uid];
-  }
+  // ====== mention source (utama dari users, fallback dari presence) ======
+  const mentionSource: MentionUser[] = useMemo(() => {
+    if (mentionUsers.length) return mentionUsers;
 
-  // ---------- auth + admin check + get platform username ----------
+    let list: MentionUser[] = Object.values(onlineMap)
+      .map((u) => ({
+        id: u.id,
+        username: u.name || "user",
+        role: u.role,
+        is_admin: u.role === "admin",
+      }))
+      .filter((x) => x.username);
+
+    if (isAdmin) {
+      list = [
+        { id: "all", username: "all", role: "admin", is_admin: true },
+        ...list,
+      ];
+    }
+
+    const seen = new Set<string>();
+    return list.filter((x) => {
+      const k = x.username.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [mentionUsers, onlineMap, isAdmin]);
+
+  const filteredMentionUsers = useMemo(() => {
+    const q = mentionQuery.toLowerCase();
+    const list = mentionSource.filter((u) =>
+      u.username.toLowerCase().includes(q)
+    );
+    return list.slice(0, 8);
+  }, [mentionSource, mentionQuery]);
+
+  // ---------- auth + admin check ----------
   useEffect(() => {
     let mounted = true;
 
@@ -179,15 +206,21 @@ export default function LiveChatWidget() {
 
         const { data } = await supabase
           .from("users")
-          .select("is_admin, admin, username")
+          .select("is_admin, role, username")
           .eq("id", uid)
           .single();
 
         if (!mounted) return;
 
-        const adminFlag = !!data?.is_admin || !!data?.admin;
+        const adminFlag = !!data?.is_admin || data?.role === "admin";
         setIsAdmin(adminFlag);
-        setUsername((data?.username || auth.user?.email || "User").toString());
+
+        const uname =
+          data?.username || auth.user?.email?.split("@")[0] || "User";
+        setUsername(String(uname));
+
+        const saved = localStorage.getItem(lastReadKey(uid));
+        lastReadAtRef.current = saved ? Number(saved) : 0;
       } catch {
         if (mounted) {
           setIsAdmin(false);
@@ -202,35 +235,83 @@ export default function LiveChatWidget() {
     };
   }, []);
 
-  // ---------- fetch mention users (RPC) ----------
+  // ---------- hitung unread awal waktu chat tertutup ----------
+  useEffect(() => {
+    if (!userId || open) return;
+
+    (async () => {
+      try {
+        // kalau belum pernah read, set ke pesan terakhir supaya history gak dihitung unread
+        if (!lastReadAtRef.current) {
+          const { data: lastMsg } = await supabase
+            .from("chat_messages")
+            .select("created_at")
+            .eq("room", CHAT_ROOM)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const ts = lastMsg?.created_at
+            ? new Date(lastMsg.created_at).getTime()
+            : Date.now();
+
+          lastReadAtRef.current = ts;
+          localStorage.setItem(lastReadKey(userId), String(ts));
+          setUnread(0);
+          return;
+        }
+
+        const { count } = await supabase
+          .from("chat_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("room", CHAT_ROOM)
+          .gt("created_at", new Date(lastReadAtRef.current).toISOString());
+
+        // kalau RLS ngeblok count, count bisa null → fallback 0
+        setUnread(count || 0);
+      } catch {
+        // RLS ngeblok query? gapapa, unread realtime tetap jalan
+        setUnread((u) => u || 0);
+      }
+    })();
+  }, [userId, open]);
+
+  // ---------- fetch mention users dari table users ----------
   useEffect(() => {
     if (!userId) return;
 
     (async () => {
       try {
-        const { data, error } = await supabase.rpc("get_public_users");
-        if (error) {
-          showNotice("mention hanya tampil jika policy select aktif");
-          return;
-        }
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, username, role, is_admin");
 
-        let list: MentionUser[] =
+        if (error) throw error;
+
+        let list =
           (data || [])
-            .filter((u: any) => u.username && u.id !== userId) // ❗ exclude diri sendiri
             .map((u: any) => ({
-              id: u.id as string,
-              username: String(u.username),
+              id: String(u.id),
+              username: String(u.username || ""),
+              role: (u.role || "user") as any,
               is_admin: !!u.is_admin,
-            })) || [];
+            }))
+            .filter((u: any) => u.username) || [];
 
-        // admin bisa @all
         if (isAdmin) {
-          list = [{ id: "all", username: "all", is_admin: true }, ...list];
+          list = [
+            { id: "all", username: "all", role: "admin", is_admin: true },
+            ...list,
+          ];
         }
 
         setMentionUsers(list);
       } catch {
-        showNotice("mention hanya tampil jika policy select aktif");
+        setMentionUsers(
+          isAdmin
+            ? [{ id: "all", username: "all", role: "admin", is_admin: true }]
+            : []
+        );
       }
     })();
   }, [userId, isAdmin]);
@@ -239,11 +320,21 @@ export default function LiveChatWidget() {
   useEffect(() => {
     if (!open) return;
     fetchMessages(CHAT_ROOM)
-      .then((data) => setMsgs((data || []) as Msg[]))
-      .catch(() => setMsgs([]));
-  }, [open]);
+      .then((data) => {
+        const arr = (data || []) as Msg[];
+        setMsgs(arr);
 
-  // ---------- realtime chat (INSERT + DELETE) ----------
+        const last = arr[arr.length - 1];
+        const ts = last ? new Date(last.created_at).getTime() : Date.now();
+        lastReadAtRef.current = ts;
+        if (userId) localStorage.setItem(lastReadKey(userId), String(ts));
+
+        setUnread(0);
+      })
+      .catch(() => setMsgs([]));
+  }, [open, userId]);
+
+  // ---------- realtime chat ----------
   useEffect(() => {
     const ch = supabase
       .channel("global-chat")
@@ -259,32 +350,36 @@ export default function LiveChatWidget() {
           const m = payload.new as Msg;
           setMsgs((prev) => [...prev, m]);
 
-          // mention popup
-          if (
-            username &&
-            m.sender_id !== userId &&
-            new RegExp(`@${username}\\b`, "i").test(m.content || "")
-          ) {
-            showNotice(`📣 Kamu di-mention oleh ${m.sender_name || "User"}!`);
-            try {
-              const audio = new Audio("/sounds/mention.mp3");
-              audio.volume = 0.35;
-              audio.play().catch(() => {});
-            } catch {}
+          const isMine = m.sender_id === userId;
+          const mTime = new Date(m.created_at).getTime();
+
+          // unread realtime saat chat tertutup
+          if (!open && !isMine) {
+            if (mTime > lastReadAtRef.current) {
+              setUnread((u) => u + 1);
+            }
           }
 
-          // admin @all
-          if (
-            m.sender_id !== userId &&
-            /\@all\b/i.test(m.content || "") &&
-            m.sender_role === "admin"
-          ) {
-            showNotice(`📣 Admin mem-mention semua orang!`);
-            try {
-              const audio = new Audio("/sounds/mention.mp3");
-              audio.volume = 0.35;
-              audio.play().catch(() => {});
-            } catch {}
+          // notif mention by USERNAME
+          const me = (username || "").toLowerCase();
+          const content = (m.content || "").toLowerCase();
+
+          if (me && !isMine && new RegExp(`@${me}\\b`, "i").test(content)) {
+            showNotice(`📣 Kamu di-mention oleh ${m.sender_name || "User"}!`);
+            playMentionSound();
+          }
+
+          if (!isMine && /@all\b/i.test(m.content || "")) {
+            showNotice(`📣 Admin mention semua orang!`);
+            playMentionSound();
+          }
+
+          // kalau chat kebuka, update read marker
+          if (open) {
+            lastReadAtRef.current = mTime;
+            if (userId)
+              localStorage.setItem(lastReadKey(userId), String(mTime));
+            setUnread(0);
           }
         }
       )
@@ -316,9 +411,9 @@ export default function LiveChatWidget() {
         supabase.removeChannel(chatChannelRef.current);
       chatChannelRef.current = null;
     };
-  }, [username, userId]);
+  }, [username, userId, open]);
 
-  // ---------- presence (online users + typing broadcast) ----------
+  // ---------- presence ----------
   useEffect(() => {
     if (!userId) return;
 
@@ -371,7 +466,7 @@ export default function LiveChatWidget() {
       if (status === "SUBSCRIBED") {
         await presence.track({
           id: userId,
-          name: username || "User",
+          name: username || "User", // <= TRACK USERNAME
           role: isAdmin ? "admin" : "user",
           typing: false,
           lastTypingAt: 0,
@@ -394,7 +489,7 @@ export default function LiveChatWidget() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, open]);
 
-  // ---------- reactions fetch/aggregate ----------
+  // ---------- reactions ----------
   useEffect(() => {
     if (!msgs.length) return;
     const ids = msgs.map((m) => m.id);
@@ -447,10 +542,9 @@ export default function LiveChatWidget() {
     }
   }
 
-  // ---------- typing handler ----------
+  // ---------- typing ----------
   function emitTyping(isTyping: boolean) {
     if (!presenceChannelRef.current || !userId) return;
-
     const now = Date.now();
     if (now - typingThrottleRef.current < 500 && isTyping) return;
     typingThrottleRef.current = now;
@@ -458,7 +552,11 @@ export default function LiveChatWidget() {
     presenceChannelRef.current.send({
       type: "broadcast",
       event: "typing",
-      payload: { uid: userId, name: username || "User", typing: isTyping },
+      payload: {
+        uid: userId,
+        name: username || "User",
+        typing: isTyping,
+      },
     });
 
     presenceChannelRef.current.track({
@@ -470,41 +568,39 @@ export default function LiveChatWidget() {
     });
   }
 
-  function onTypeChange(v: string) {
-    setText(v);
-    emitTyping(true);
-
-    // ---- mention detection ----
-    const token = getLastToken(v);
-    if (token.startsWith("@")) {
-      setMentionOpen(true);
-      setMentionQuery(token.slice(1).toLowerCase());
-    } else {
+  // detect mention by username (underscore, number, huruf)
+  function handleMentionDetect(v: string) {
+    const m = v.match(/(^|\s)@([a-zA-Z0-9_]*)$/);
+    if (!m) {
       setMentionOpen(false);
       setMentionQuery("");
+      setMentionIndex(0);
+      return;
     }
+    setMentionOpen(true);
+    setMentionQuery(m[2] || "");
+    setMentionIndex(0);
+  }
 
+  function onTypeChange(v: string) {
+    setText(v);
+    handleMentionDetect(v);
+
+    emitTyping(true);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => emitTyping(false), 1200);
   }
 
-  function onPickMention(u: MentionUser) {
-    const token = getLastToken(text);
-    if (!token.startsWith("@")) return;
-
-    const replaced = replaceLastToken(text, `@${u.username} `);
-    setText(replaced);
+  function applyMention(u: MentionUser) {
+    setText((prev) =>
+      prev.replace(/(^|\s)@([a-zA-Z0-9_]*)$/, `$1@${u.username} `)
+    );
     setMentionOpen(false);
     setMentionQuery("");
+    setMentionIndex(0);
   }
 
-  const filteredMentions = useMemo(() => {
-    const q = mentionQuery.trim();
-    if (!q) return mentionUsers;
-    return mentionUsers.filter((u) => u.username.toLowerCase().includes(q));
-  }, [mentionUsers, mentionQuery]);
-
-  // ---------- send message ----------
+  // ---------- send ----------
   async function onSend(attachment?: ChatAttachment | null) {
     if (!userId) return;
 
@@ -515,7 +611,6 @@ export default function LiveChatWidget() {
     }
 
     const cleaned = sanitize(text);
-
     if (!cleaned && !attachment) return;
 
     if (cleaned && cleaned === lastMsgRef.current && !attachment) {
@@ -557,7 +652,6 @@ export default function LiveChatWidget() {
     }
   }
 
-  // ---------- admin delete ----------
   async function onDeleteMessage(mid: number) {
     if (!isAdmin) return;
     try {
@@ -567,7 +661,6 @@ export default function LiveChatWidget() {
     }
   }
 
-  // ---------- attachment upload handlers ----------
   async function handlePickFile() {
     fileInputRef.current?.click();
   }
@@ -584,22 +677,28 @@ export default function LiveChatWidget() {
     }
   }
 
-  // ---------- voice note ----------
   async function startRecording() {
     if (recording) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
+      const mr = new MediaRecorder(stream, { mimeType });
       recordChunksRef.current = [];
+
       mr.ondataavailable = (ev) => {
         if (ev.data.size > 0) recordChunksRef.current.push(ev.data);
       };
+
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(recordChunksRef.current, { type: mimeType });
         const file = new File([blob], `voice-${Date.now()}.webm`, {
-          type: "audio/webm",
+          type: mimeType,
         });
+
         try {
           if (!userId) return;
           const att = await uploadAttachment(file, userId, CHAT_ROOM);
@@ -625,33 +724,38 @@ export default function LiveChatWidget() {
     setRecording(false);
   }
 
-  // Chat hanya untuk user login
   if (!userId) return null;
 
   return (
     <>
-      {/* Floating button */}
+      {/* BUTTON SAAT TERTUTUP + BADGE UNREAD */}
       {!open && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setOpen(true);
+            setUnread(0);
+          }}
           className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-purple-600 px-4 py-3 text-white shadow-lg hover:bg-purple-700"
         >
           <MessageSquare className="h-5 w-5" />
           Live Chat
+          {unread > 0 && (
+            <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
         </button>
       )}
 
-      {/* Drawer */}
       <div
         className={clsx(
-          "fixed bottom-5 right-5 z-50 w-[380px] max-w-[94vw] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl transition-all",
+          "fixed bottom-5 right-5 z-50 w-[380px] max-w-[94vw] rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl transition-all overflow-visible",
           open
             ? "translate-y-0 opacity-100"
             : "translate-y-5 opacity-0 pointer-events-none"
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between bg-zinc-900 px-4 py-3">
+        <div className="flex items-center justify-between bg-zinc-900 px-4 py-3 rounded-t-2xl">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             Polije Live Chat
             <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 ring-1 ring-emerald-400/30">
@@ -667,7 +771,6 @@ export default function LiveChatWidget() {
           </button>
         </div>
 
-        {/* Notice popup */}
         {notice && (
           <div className="px-3 pt-2">
             <div className="rounded-xl bg-white/10 px-3 py-2 text-xs text-white">
@@ -676,22 +779,15 @@ export default function LiveChatWidget() {
           </div>
         )}
 
-        {/* ====== LIST CHAT ====== */}
-        <div
-          className={clsx(
-            "relative h-[380px] overflow-y-auto px-3 py-3 text-sm",
-            "bg-[radial-gradient(ellipse_at_top,_rgba(168,85,247,0.10)_0%,_transparent_60%),radial-gradient(ellipse_at_bottom,_rgba(59,130,246,0.10)_0%,_transparent_60%),linear-gradient(180deg,_rgba(0,0,0,0.9)_0%,_rgba(0,0,0,0.7)_100%)]"
-          )}
-        >
+        <div className="relative h-[380px] overflow-y-auto px-3 py-3 text-sm rounded-b-none">
           {msgs.map((m) => {
             const isMine = m.sender_id === userId;
+            const reacts = reactionsMap[m.id] || [];
             const bubbleClass = isMine
               ? "bg-purple-600 text-white"
               : m.sender_role === "admin"
               ? "bg-zinc-800 text-white"
               : "bg-zinc-900 text-white";
-
-            const reacts = reactionsMap[m.id] || [];
 
             return (
               <div
@@ -702,12 +798,7 @@ export default function LiveChatWidget() {
                 )}
               >
                 <div className="max-w-[80%]">
-                  <div
-                    className={clsx(
-                      "rounded-2xl px-3 py-2 shadow-sm",
-                      bubbleClass
-                    )}
-                  >
+                  <div className={clsx("rounded-2xl px-3 py-2", bubbleClass)}>
                     <div className="text-[11px] opacity-80 mb-1 font-medium">
                       {m.sender_role === "admin"
                         ? "Admin"
@@ -734,21 +825,11 @@ export default function LiveChatWidget() {
                     {m.attachment_url && (
                       <div className="mt-2">
                         {m.attachment_type === "image" ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={m.attachment_url}
                             alt={m.attachment_name || "image"}
                             className="max-h-60 rounded-xl border border-white/10 object-contain"
                           />
-                        ) : m.attachment_type === "pdf" ? (
-                          <a
-                            href={m.attachment_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                          >
-                            📄 {m.attachment_name || "file.pdf"}
-                          </a>
                         ) : m.attachment_type === "audio" ? (
                           <audio
                             controls
@@ -783,7 +864,6 @@ export default function LiveChatWidget() {
                             "rounded-full px-2 py-0.5 text-[11px] border border-white/10 bg-white/5 hover:bg-white/10",
                             r.reactedByMe && "ring-1 ring-purple-400/60"
                           )}
-                          title="Toggle reaction"
                         >
                           {r.emoji} {r.count}
                         </button>
@@ -799,7 +879,6 @@ export default function LiveChatWidget() {
                         key={e}
                         onClick={() => onReact(m.id, e)}
                         className="rounded-lg bg-white/10 p-1 text-white/70 hover:bg-white/20 hover:text-white"
-                        title={`React ${e}`}
                       >
                         <span className="text-sm">{e}</span>
                       </button>
@@ -807,12 +886,8 @@ export default function LiveChatWidget() {
                   </div>
 
                   <button
-                    onClick={() => {
-                      setReplyTo(m);
-                      setOpen(true);
-                    }}
+                    onClick={() => setReplyTo(m)}
                     className="hidden rounded-lg bg-white/10 p-1 text-white/70 hover:bg-white/20 hover:text-white group-hover:inline-flex"
-                    title="Reply"
                   >
                     <Reply className="h-4 w-4" />
                   </button>
@@ -821,7 +896,6 @@ export default function LiveChatWidget() {
                     <button
                       onClick={() => onDeleteMessage(m.id)}
                       className="hidden rounded-lg bg-red-500/15 p-1 text-red-300 hover:bg-red-500/30 group-hover:inline-flex"
-                      title="Hapus pesan"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -830,7 +904,6 @@ export default function LiveChatWidget() {
               </div>
             );
           })}
-
           <div ref={bottomRef} />
         </div>
 
@@ -840,8 +913,7 @@ export default function LiveChatWidget() {
           </div>
         )}
 
-        {/* ====== REPLY BAR + INPUT CHAT ====== */}
-        <div className="border-t border-white/10 bg-zinc-900 p-2 space-y-2 relative">
+        <div className="border-t border-white/10 bg-zinc-900 p-2 space-y-2 relative rounded-b-2xl">
           {replyTo && (
             <div className="flex items-start justify-between gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs text-white">
               <div className="min-w-0">
@@ -864,9 +936,8 @@ export default function LiveChatWidget() {
             </div>
           )}
 
-          {/* emoji picker */}
           {emojiOpen && (
-            <div className="absolute bottom-[62px] left-2 z-20 w-[280px] rounded-2xl border border-white/10 bg-zinc-950 p-2 shadow-2xl">
+            <div className="absolute bottom-[62px] left-2 z-50 w-[280px] rounded-2xl border border-white/10 bg-zinc-950 p-2 shadow-2xl">
               <div className="grid grid-cols-8 gap-1">
                 {EMOJIS.map((e) => (
                   <button
@@ -876,7 +947,6 @@ export default function LiveChatWidget() {
                       setEmojiOpen(false);
                     }}
                     className="rounded-lg p-1 hover:bg-white/10 text-lg"
-                    title={e}
                   >
                     {e}
                   </button>
@@ -885,54 +955,34 @@ export default function LiveChatWidget() {
             </div>
           )}
 
-          {/* mention dropdown */}
-          {mentionOpen && filteredMentions.length > 0 && (
-            <div className="absolute bottom-[62px] left-2 z-20 w-[280px] max-h-[220px] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-1 shadow-2xl">
-              {filteredMentions.map((u) => {
-                const online = u.id === "all" ? true : isUserOnline(u.id);
-                return (
-                  <button
-                    key={u.id}
-                    onClick={() => onPickMention(u)}
-                    className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                  >
-                    <div className="min-w-0 truncate">
-                      @{u.username}
-                      {u.is_admin && u.id !== "all" && (
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200">
-                          admin
-                        </span>
-                      )}
-                      {u.id === "all" && (
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-200">
-                          broadcast
-                        </span>
-                      )}
-                    </div>
-
-                    <div
-                      className={clsx(
-                        "text-[10px] px-2 py-0.5 rounded-full border",
-                        online
-                          ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                          : "border-white/10 bg-white/5 text-white/50"
-                      )}
-                    >
-                      {online ? "online" : "offline"}
-                    </div>
-                  </button>
-                );
-              })}
+          {mentionOpen && filteredMentionUsers.length > 0 && (
+            <div className="absolute bottom-[62px] left-2 z-50 w-[260px] rounded-2xl border border-white/10 bg-zinc-950 p-1 shadow-2xl">
+              {filteredMentionUsers.map((u, i) => (
+                <button
+                  key={u.id}
+                  onClick={() => applyMention(u)}
+                  className={clsx(
+                    "w-full flex items-center gap-2 px-3 py-2 text-xs text-white/80 hover:bg-white/10 rounded-xl",
+                    i === mentionIndex && "bg-white/10 text-white"
+                  )}
+                >
+                  <AtSign className="h-3.5 w-3.5" />
+                  <span className="truncate">@{u.username}</span>
+                  {u.is_admin && (
+                    <span className="ml-auto text-[10px] text-emerald-300">
+                      admin
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           )}
 
-          <div className="flex flex-wrap sm:flex-nowrap gap-2 items-end w-full">
-            {/* left tools */}
+          <div className="flex gap-2 items-end">
             <div className="flex items-center gap-1 pb-1">
               <button
                 onClick={() => setEmojiOpen((v) => !v)}
                 className="rounded-xl bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white"
-                title="Emoji"
               >
                 <SmilePlus className="h-5 w-5" />
               </button>
@@ -940,7 +990,6 @@ export default function LiveChatWidget() {
               <button
                 onClick={handlePickFile}
                 className="rounded-xl bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white"
-                title="Upload file / foto / pdf / audio"
               >
                 <Paperclip className="h-5 w-5" />
               </button>
@@ -949,7 +998,6 @@ export default function LiveChatWidget() {
                 <button
                   onClick={startRecording}
                   className="rounded-xl bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white"
-                  title="Voice note"
                 >
                   <Mic className="h-5 w-5" />
                 </button>
@@ -957,30 +1005,53 @@ export default function LiveChatWidget() {
                 <button
                   onClick={stopRecording}
                   className="rounded-xl bg-red-500/15 p-2 text-red-300 hover:bg-red-500/30"
-                  title="Stop recording"
                 >
                   <StopCircle className="h-5 w-5" />
                 </button>
               )}
             </div>
 
-            {/* input */}
             <input
-              className="min-w-0 flex-1 rounded-xl bg-zinc-800 px-3 py-2 text-white outline-none placeholder:text-white/40"
-              placeholder="Tulis pesan..."
+              className="flex-1 min-w-0 w-0 rounded-xl bg-zinc-800 px-3 py-2 text-white outline-none placeholder:text-white/40"
+              placeholder="Tulis pesan... (pakai @ untuk mention username)"
               value={text}
               onChange={(e) => onTypeChange(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onSend()}
+              onKeyDown={(e) => {
+                if (mentionOpen && filteredMentionUsers.length > 0) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMentionIndex((i) =>
+                      Math.min(i + 1, filteredMentionUsers.length - 1)
+                    );
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMentionIndex((i) => Math.max(i - 1, 0));
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyMention(filteredMentionUsers[mentionIndex]);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    setMentionOpen(false);
+                    return;
+                  }
+                }
+
+                if (e.key === "Enter") onSend();
+              }}
             />
 
             <button
               onClick={() => onSend()}
-              className="shrink-0 whitespace-nowrap rounded-xl bg-purple-600 px-3 sm:px-4 py-2 text-white hover:bg-purple-700"
+              className="rounded-xl bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 shrink-0"
             >
               Kirim
             </button>
 
-            {/* hidden file input */}
             <input
               ref={fileInputRef}
               type="file"
