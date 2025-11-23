@@ -25,7 +25,6 @@ type PresenceUser = {
 };
 
 const CHAT_ROOM = "global";
-const CHAT_NAME_KEY = "global_chat_name_v1";
 const COOLDOWN_MS = 1500;
 const MAX_LEN = 500;
 
@@ -79,12 +78,24 @@ export default function LiveChatWidget() {
     return escapeHtml(t);
   }
 
+  function getNameKey(uid: string) {
+    return `global_chat_name_${uid}`;
+    // per-user key => tiap akun wajib input nama sendiri
+  }
+
   function saveName() {
     const n = name.trim().slice(0, 30);
-    if (!n) return;
-    localStorage.setItem(CHAT_NAME_KEY, n);
+    if (!n || !userId) return;
+    localStorage.setItem(getNameKey(userId), n);
     setName(n);
     setNameReady(true);
+  }
+
+  function resetName() {
+    if (!userId) return;
+    localStorage.removeItem(getNameKey(userId));
+    setName("");
+    setNameReady(false);
   }
 
   // ---------- derived ----------
@@ -140,20 +151,26 @@ export default function LiveChatWidget() {
     };
   }, []);
 
-  // ---------- load display name ----------
+  // ---------- load display name PER USER ----------
   useEffect(() => {
-    const saved = localStorage.getItem(CHAT_NAME_KEY);
+    if (!userId) return;
+
+    const saved = localStorage.getItem(getNameKey(userId));
     if (saved && saved.trim()) {
       setName(saved);
       setNameReady(true);
+    } else {
+      // user baru / belum isi nama => wajib isi lagi
+      setName("");
+      setNameReady(false);
     }
-  }, []);
+  }, [userId]);
 
   // ---------- load messages when opened ----------
   useEffect(() => {
     if (!open) return;
     fetchMessages()
-      .then((data) => setMsgs((data || []) as Msg[]))
+      .then((data: Msg[] | null) => setMsgs((data || []) as Msg[]))
       .catch(() => setMsgs([]));
   }, [open]);
 
@@ -243,7 +260,6 @@ export default function LiveChatWidget() {
 
       setOnlineMap(map);
 
-      // typing users extracted from presence state
       const tmap: Record<string, string> = {};
       Object.values(map).forEach((u) => {
         if (u.typing && u.id !== userId) tmap[u.id] = u.name;
@@ -251,7 +267,6 @@ export default function LiveChatWidget() {
       setTypingUsers(tmap);
     });
 
-    // broadcast typing events (for faster UI)
     presence.on("broadcast", { event: "typing" }, ({ payload }) => {
       const { uid, name: uname, typing } = payload || {};
       if (!uid || uid === userId) return;
@@ -263,7 +278,6 @@ export default function LiveChatWidget() {
         return next;
       });
 
-      // also patch onlineMap if exists
       setOnlineMap((prev) => {
         if (!prev[uid]) return prev;
         return {
@@ -304,7 +318,6 @@ export default function LiveChatWidget() {
   function emitTyping(isTyping: boolean) {
     if (!presenceChannelRef.current || !userId) return;
 
-    // throttle broadcast to avoid spam
     const now = Date.now();
     if (now - typingThrottleRef.current < 500 && isTyping) return;
     typingThrottleRef.current = now;
@@ -312,14 +325,9 @@ export default function LiveChatWidget() {
     presenceChannelRef.current.send({
       type: "broadcast",
       event: "typing",
-      payload: {
-        uid: userId,
-        name: name || "User",
-        typing: isTyping,
-      },
+      payload: { uid: userId, name: name || "User", typing: isTyping },
     });
 
-    // also update my presence state (sync)
     presenceChannelRef.current.track({
       id: userId,
       name: name || "User",
@@ -350,10 +358,8 @@ export default function LiveChatWidget() {
     }
 
     const cleaned = sanitize(text);
-
     if (!cleaned) return;
 
-    // no duplicate spam
     if (cleaned === lastMsgRef.current) {
       showNotice("❗ Jangan kirim pesan yang sama terus.");
       return;
@@ -420,12 +426,23 @@ export default function LiveChatWidget() {
               Online {onlineCount}
             </span>
           </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="text-white/70 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {nameReady && (
+              <button
+                onClick={resetName}
+                className="text-[11px] text-white/60 hover:text-white/90"
+                title="Ganti nama chat"
+              >
+                ganti nama
+              </button>
+            )}
+            <button
+              onClick={() => setOpen(false)}
+              className="text-white/70 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Notice popup */}
@@ -463,7 +480,6 @@ export default function LiveChatWidget() {
             <div
               className={clsx(
                 "relative h-[380px] overflow-y-auto px-3 py-3 text-sm",
-                // background biar gak kepotong:
                 "bg-[radial-gradient(ellipse_at_top,_rgba(168,85,247,0.10)_0%,_transparent_60%),radial-gradient(ellipse_at_bottom,_rgba(59,130,246,0.10)_0%,_transparent_60%),linear-gradient(180deg,_rgba(0,0,0,0.9)_0%,_rgba(0,0,0,0.7)_100%)]"
               )}
             >
@@ -495,7 +511,6 @@ export default function LiveChatWidget() {
                           : m.sender_name || "User"}
                       </div>
 
-                      {/* content sudah disanitasi sebelum dikirim, tetap render sebagai text */}
                       <div className="whitespace-pre-wrap break-words">
                         {m.content}
                       </div>
