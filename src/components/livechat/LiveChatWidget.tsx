@@ -1013,7 +1013,7 @@ export default function LiveChatWidget() {
 
             <input
               className="flex-1 min-w-0 w-0 rounded-xl bg-zinc-800 px-3 py-2 text-white outline-none placeholder:text-white/40"
-              placeholder="Tulis pesan... (pakai @ untuk mention username)"
+              placeholder="Tulis pesan..."
               value={text}
               onChange={(e) => onTypeChange(e.target.value)}
               onKeyDown={(e) => {
