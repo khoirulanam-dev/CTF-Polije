@@ -32,29 +32,14 @@ export type ChatMessage = {
 const ROOM = "global";
 const BUCKET = "chat-attachments";
 
-/**
- * Ambil history chat untuk room global.
- */
 export async function fetchMessages(room: string = ROOM): Promise<ChatMessage[]> {
   const { data, error } = await supabase
     .from("chat_messages")
     .select(
       `
-      id,
-      room,
-      sender_id,
-      sender_role,
-      sender_name,
-      content,
-      created_at,
-      reply_to_id,
-      reply_to_name,
-      reply_to_content,
-      attachment_url,
-      attachment_name,
-      attachment_size,
-      attachment_mime,
-      attachment_type
+      id, room, sender_id, sender_role, sender_name, content, created_at,
+      reply_to_id, reply_to_name, reply_to_content,
+      attachment_url, attachment_name, attachment_size, attachment_mime, attachment_type
     `
     )
     .eq("room", room)
@@ -65,31 +50,16 @@ export async function fetchMessages(room: string = ROOM): Promise<ChatMessage[]>
     console.error("fetchMessages error", error);
     return [];
   }
-
   return (data || []) as ChatMessage[];
 }
 
-export type ReplyMeta =
-  | {
-      reply_to_id?: number | null;
-      reply_to_name?: string | null;
-      reply_to_content?: string | null;
-    }
-  | null;
+export type SendOptions = {
+  reply_to_id?: number | null;
+  reply_to_name?: string | null;
+  reply_to_content?: string | null;
+  attachment?: ChatAttachment | null;
+} | null;
 
-export type SendOptions =
-  | ReplyMeta
-  | {
-      reply_to_id?: number | null;
-      reply_to_name?: string | null;
-      reply_to_content?: string | null;
-      attachment?: ChatAttachment | null;
-    }
-  | null;
-
-/**
- * Kirim pesan baru (support reply + attachment).
- */
 export async function sendMessage(
   sender_id: string,
   sender_role: "user" | "admin",
@@ -103,16 +73,16 @@ export async function sendMessage(
     sender_id,
     sender_role,
     sender_name,
-    content,
+    content: content || "",
   };
 
-  if (opts && "reply_to_id" in opts) {
+  if (opts?.reply_to_id) {
     payload.reply_to_id = opts.reply_to_id ?? null;
     payload.reply_to_name = opts.reply_to_name ?? null;
     payload.reply_to_content = opts.reply_to_content ?? null;
   }
 
-  if (opts && "attachment" in opts && opts.attachment) {
+  if (opts?.attachment) {
     payload.attachment_url = opts.attachment.url;
     payload.attachment_name = opts.attachment.name;
     payload.attachment_size = opts.attachment.size;
@@ -121,16 +91,12 @@ export async function sendMessage(
   }
 
   const { error } = await supabase.from("chat_messages").insert(payload);
-
   if (error) {
     console.error("sendMessage error", error);
     throw error;
   }
 }
 
-/**
- * Toggle reaction emoji (like/unlike).
- */
 export async function toggleReaction(
   message_id: number,
   emoji: string,
@@ -151,7 +117,6 @@ export async function toggleReaction(
       .from("chat_reactions")
       .delete()
       .eq("id", exist.id);
-
     if (error) throw error;
     return { reacted: false };
   }
@@ -164,12 +129,8 @@ export async function toggleReaction(
   return { reacted: true };
 }
 
-/**
- * Ambil semua reactions untuk sekumpulan message id.
- */
 export async function fetchReactions(messageIds: number[]) {
   if (!messageIds.length) return [];
-
   const { data, error } = await supabase
     .from("chat_reactions")
     .select("id, message_id, user_id, emoji, created_at")
@@ -180,9 +141,9 @@ export async function fetchReactions(messageIds: number[]) {
 }
 
 /**
- * Upload attachment aman (gambar/pdf/audio).
- * - block svg/executable/script
- * - allowlist MIME
+ * Upload attachment aman:
+ * - allowlist mime
+ * - block ext bahaya (svg/exe/js/php/dll/dsb)
  * - size limit
  */
 export async function uploadAttachment(
@@ -197,23 +158,10 @@ export async function uploadAttachment(
   const name = file.name || "file";
   const size = file.size;
 
-  if (size > maxBytes) {
-    throw new Error(`File terlalu besar. Max ${MAX_MB}MB`);
-  }
+  if (size > maxBytes) throw new Error(`File terlalu besar. Max ${MAX_MB}MB`);
 
   const blockedExt = [
-    ".svg",
-    ".exe",
-    ".dll",
-    ".bat",
-    ".sh",
-    ".js",
-    ".php",
-    ".py",
-    ".jar",
-    ".com",
-    ".msi",
-    ".cmd",
+    ".svg",".exe",".dll",".bat",".sh",".js",".php",".py",".jar",".com",".msi",".cmd",".html",".htm"
   ];
   const lowerName = name.toLowerCase();
   if (blockedExt.some((ext) => lowerName.endsWith(ext))) {
@@ -222,20 +170,15 @@ export async function uploadAttachment(
 
   const isImage = mime.startsWith("image/");
   const isPdf = mime === "application/pdf";
-  const isAudio =
-    mime.startsWith("audio/") || mime === "audio/webm" || mime === "audio/ogg";
+  const isAudio = mime.startsWith("audio/") || mime === "audio/webm" || mime === "audio/ogg";
 
   if (!isImage && !isPdf && !isAudio) {
     throw new Error("Hanya boleh upload gambar, pdf, atau audio.");
   }
 
-  const type: ChatAttachment["type"] = isImage
-    ? "image"
-    : isPdf
-    ? "pdf"
-    : "audio";
-
+  const type: ChatAttachment["type"] = isImage ? "image" : isPdf ? "pdf" : "audio";
   const ext = lowerName.split(".").pop() || "bin";
+
   const path = `${room}/${user_id}/${Date.now()}_${Math.random()
     .toString(36)
     .slice(2)}.${ext}`;
@@ -252,11 +195,5 @@ export async function uploadAttachment(
 
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
 
-  return {
-    url: pub.publicUrl,
-    name,
-    size,
-    mime,
-    type,
-  };
+  return { url: pub.publicUrl, name, size, mime, type };
 }
