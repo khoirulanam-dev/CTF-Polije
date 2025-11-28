@@ -251,7 +251,11 @@ async def post_latest(channel, solves: List[Dict[str, Any]], state: Dict[str, An
 
             # sisipkan sid biar bisa dicocokkan nanti
             # content = f"🩸 **{s['user']}** claimed first blood on **{s['challenge']}** ({s['category']}) at {solved_str} {mention}\n`{sid}`"
-            content = f"🩸 **{s['user']}** claimed first blood on **{s['challenge']}** ({s['category']}) at {solved_str} {mention} ||{sid}||"
+            content = (
+    f"🩸 **{s['user']}** claimed first blood on **{s['challenge']}** "
+    f"({s['category']}) at {solved_str} {mention}"
+)
+
 
             msg = await channel.send(content)
             current_ids.append(str(msg.id))
