@@ -2,6 +2,12 @@ export interface User {
   id: string
   username: string
   picture?: string
+  avatar_url?: string | null
+  bio?: string | null
+  github_url?: string | null
+  linkedin_url?: string | null
+  instagram_url?: string | null
+  website_url?: string | null
   score: number
   rank?: number
   is_admin?: boolean

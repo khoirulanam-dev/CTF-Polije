@@ -11,9 +11,29 @@ export type UserDetail = {
   rank: number | null
   score: number
   picture?: string | null
+  avatar_url?: string | null
+  bio?: string | null
+  github_url?: string | null
+  linkedin_url?: string | null
+  instagram_url?: string | null
+  website_url?: string | null
   solved_challenges: ChallengeWithSolve[]
   highest_rank?: number | null
   highest_rank_at?: string | null
+}
+
+export type ProfileUpdateInput = {
+  username: string
+  avatar_url?: string | null
+  bio?: string | null
+  github_url?: string | null
+  linkedin_url?: string | null
+  instagram_url?: string | null
+  website_url?: string | null
+}
+
+export type ProfileUpdateResult = ProfileUpdateInput & {
+  picture?: string | null
 }
 
 // ambil detail user via RPC `detail_user` (yang tadi sudah kita update di supabase)
@@ -37,6 +57,12 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       rank: u.rank ?? null,
       score: u.score ?? 0,
       picture: u.picture ?? null,
+      avatar_url: u.avatar_url ?? null,
+      bio: u.bio ?? null,
+      github_url: u.github_url ?? null,
+      linkedin_url: u.linkedin_url ?? null,
+      instagram_url: u.instagram_url ?? null,
+      website_url: u.website_url ?? null,
       // ⬇️ ikutkan dari RPC
       highest_rank: u.highest_rank ?? null,
       highest_rank_at: u.highest_rank_at ?? null,
@@ -63,7 +89,7 @@ export async function getUserByUsername(username: string): Promise<User | null> 
     const { data, error } = await supabase
       .from('users')
       // ambil field yg kita butuhkan aja, termasuk yg baru
-      .select('id, username, is_admin, highest_rank, highest_rank_at, created_at, updated_at')
+      .select('id, username, avatar_url, bio, github_url, linkedin_url, instagram_url, website_url, is_admin, highest_rank, highest_rank_at, created_at, updated_at')
       .eq('username', username)
       .single()
 
@@ -121,7 +147,7 @@ export async function getAllUsers(): Promise<User[]> {
     // jadi kita urutkan pakai created_at aja biar gak error
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, is_admin, highest_rank, highest_rank_at, created_at')
+      .select('id, username, avatar_url, bio, github_url, linkedin_url, instagram_url, website_url, is_admin, highest_rank, highest_rank_at, created_at')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -207,5 +233,70 @@ export async function updateUsername(
     return { error: null, username: data.username }
   } catch (error) {
     return { error: 'Failed to update username' }
+  }
+}
+
+export async function uploadProfileAvatar(
+  userId: string,
+  file: File
+): Promise<{ error: string | null; url?: string }> {
+  try {
+    if (!file.type.startsWith('image/')) {
+      return { error: 'File must be an image' }
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      return { error: 'Image must be 2 MB or smaller' }
+    }
+
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${userId}/avatar-${Date.now()}.${extension}`
+
+    const { error } = await supabase.storage
+      .from('profile-avatars')
+      .upload(path, file, {
+        cacheControl: '3600',
+        contentType: file.type,
+        upsert: true,
+      })
+
+    if (error) {
+      return { error: error.message }
+    }
+
+    const { data } = supabase.storage.from('profile-avatars').getPublicUrl(path)
+    return { error: null, url: data.publicUrl }
+  } catch (error) {
+    return { error: 'Failed to upload profile photo' }
+  }
+}
+
+export async function updateProfile(
+  userId: string,
+  profile: ProfileUpdateInput
+): Promise<{ error: string | null; profile?: ProfileUpdateResult }> {
+  try {
+    const { data, error } = await supabase.rpc('update_profile', {
+      p_id: userId,
+      p_username: profile.username,
+      p_avatar_url: profile.avatar_url || null,
+      p_bio: profile.bio || null,
+      p_github_url: profile.github_url || null,
+      p_linkedin_url: profile.linkedin_url || null,
+      p_instagram_url: profile.instagram_url || null,
+      p_website_url: profile.website_url || null,
+    })
+
+    if (error || !data) {
+      return { error: error?.message || 'Failed to update profile' }
+    }
+
+    if (!data.success) {
+      return { error: data.message || 'Failed to update profile' }
+    }
+
+    return { error: null, profile: data.profile }
+  } catch (error) {
+    return { error: 'Failed to update profile' }
   }
 }

@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import EditProfileModal from "./custom/EditProfileModal";
 import Loader from "@/components/custom/loading";
 import BackButton from "./custom/BackButton";
+import { Github, Globe, Instagram, Linkedin } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 type UserDetail = {
   id: string;
@@ -21,6 +23,12 @@ type UserDetail = {
   rank: number | null;
   score: number;
   picture?: string | null;
+  avatar_url?: string | null;
+  bio?: string | null;
+  github_url?: string | null;
+  linkedin_url?: string | null;
+  instagram_url?: string | null;
+  website_url?: string | null;
   solved_challenges: ChallengeWithSolve[];
   highest_rank?: number | null;
   highest_rank_at?: string | null;
@@ -232,6 +240,13 @@ function getUserBadges(
   return badges;
 }
 
+function normalizeProfileUrl(url?: string | null) {
+  if (!url) return "";
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 export default function UserProfile({
   userId,
   loading,
@@ -239,6 +254,7 @@ export default function UserProfile({
   onBack,
   isCurrentUser = false,
 }: Props) {
+  const { user: authUser, setUser } = useAuth();
   const [userDetail, setUserDetail] = useState<UserDetail | null>(null);
   const [firstBloodIds, setFirstBloodIds] = useState<string[]>([]);
   const [categoryProgress, setCategoryProgress] = useState<CategoryProgress[]>([]);
@@ -274,6 +290,30 @@ export default function UserProfile({
   const isLoading = loading || loadingDetail;
   const hasError = error || !userDetail;
   const solvedChallenges = userDetail?.solved_challenges || [];
+  const socialLinks = userDetail
+    ? [
+        {
+          label: "GitHub",
+          href: normalizeProfileUrl(userDetail.github_url),
+          Icon: Github,
+        },
+        {
+          label: "LinkedIn",
+          href: normalizeProfileUrl(userDetail.linkedin_url),
+          Icon: Linkedin,
+        },
+        {
+          label: "Instagram",
+          href: normalizeProfileUrl(userDetail.instagram_url),
+          Icon: Instagram,
+        },
+        {
+          label: "Website",
+          href: normalizeProfileUrl(userDetail.website_url),
+          Icon: Globe,
+        },
+      ].filter((link) => link.href)
+    : [];
 
   // Username truncation handled by Tailwind utility classes below
 
@@ -318,7 +358,7 @@ export default function UserProfile({
               transition={{ duration: 0.4 }}
             >
               <Card className="bg-white dark:bg-gray-800">
-                <CardContent className="flex items-center space-x-6 py-6">
+                <CardContent className="flex flex-col gap-5 py-6 sm:flex-row sm:items-center sm:space-x-6 sm:gap-0">
                   <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center overflow-hidden">
                     <ImageWithFallback
                       src={userDetail.picture}
@@ -328,7 +368,7 @@ export default function UserProfile({
                       fallbackBg="bg-blue-100 dark:bg-blue-900"
                     />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <h1
                       className="text-2xl font-bold text-gray-900 dark:text-white truncate whitespace-nowrap max-w-[160px] sm:max-w-xs block"
                       title={userDetail.username}
@@ -341,6 +381,27 @@ export default function UserProfile({
                         {userDetail.score}
                       </span>
                     </p>
+                    {userDetail.bio && (
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-300">
+                        {userDetail.bio}
+                      </p>
+                    )}
+                    {socialLinks.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {socialLinks.map(({ label, href, Icon }) => (
+                          <a
+                            key={label}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-300"
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {label}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     {/* BADGES */}
                     <div className="flex flex-wrap gap-2 mt-2">
                       {getUserBadges(
@@ -396,8 +457,42 @@ export default function UserProfile({
                     <EditProfileModal
                       userId={userDetail.id}
                       currentUsername={userDetail.username}
+                      currentPicture={userDetail.picture}
+                      currentBio={userDetail.bio}
+                      currentGithubUrl={userDetail.github_url}
+                      currentLinkedinUrl={userDetail.linkedin_url}
+                      currentInstagramUrl={userDetail.instagram_url}
+                      currentWebsiteUrl={userDetail.website_url}
                       onUsernameChange={(username) =>
                         setUserDetail({ ...userDetail, username })
+                      }
+                      onProfileChange={(profile) =>
+                        {
+                        setUserDetail({
+                          ...userDetail,
+                          username: profile.username,
+                          picture: profile.picture ?? profile.avatar_url ?? userDetail.picture,
+                          avatar_url: profile.avatar_url ?? null,
+                          bio: profile.bio ?? null,
+                          github_url: profile.github_url ?? null,
+                          linkedin_url: profile.linkedin_url ?? null,
+                          instagram_url: profile.instagram_url ?? null,
+                          website_url: profile.website_url ?? null,
+                        })
+                        if (isCurrentUser && authUser) {
+                          setUser({
+                            ...authUser,
+                            username: profile.username,
+                            picture: profile.picture ?? profile.avatar_url ?? authUser.picture,
+                            avatar_url: profile.avatar_url ?? null,
+                            bio: profile.bio ?? null,
+                            github_url: profile.github_url ?? null,
+                            linkedin_url: profile.linkedin_url ?? null,
+                            instagram_url: profile.instagram_url ?? null,
+                            website_url: profile.website_url ?? null,
+                          })
+                        }
+                      }
                       }
                       triggerButtonClass="bg-blue-600 dark:bg-blue-500 text-white font-semibold hover:bg-blue-700 dark:hover:bg-blue-400 border-none shadow"
                     />
