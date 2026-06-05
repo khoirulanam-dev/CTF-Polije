@@ -357,6 +357,7 @@ export default function AdminPage() {
                 <CardTitle className="flex items-center justify-between">
                   <span>Challenge List</span>
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => router.push('/admin/event')}>Event Mode</Button>
                     <Button onClick={openAdd}>+ Add Challenge</Button>
                   </div>
                 </CardTitle>

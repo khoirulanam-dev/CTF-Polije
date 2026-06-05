@@ -44,3 +44,7 @@ _tmp
 
 state.json
 solves.json
+*.sql
+!/supabase/migrations/
+!/supabase/migrations/*.sql
+/supabase/.temp/

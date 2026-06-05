@@ -79,15 +79,12 @@ export async function getUserByUsername(username: string): Promise<User | null> 
   }
 }
 
-// (ini kayaknya jarang dipake, tapi biarin aja sinkron)
+// Ambil challenge user dari kolom attachments JSONB di tabel challenges.
 export async function getUserChallenges(userId: string): Promise<ChallengeWithSolve[]> {
   try {
     const { data: challenges, error: challengesError } = await supabase
       .from('challenges')
-      .select(`
-        *,
-        attachments:challenge_attachments(*)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (challengesError) {
@@ -105,9 +102,9 @@ export async function getUserChallenges(userId: string): Promise<ChallengeWithSo
       return []
     }
 
-    const solvedChallengeIds = new Set(solves.map(solve => solve.challenge_id))
+    const solvedChallengeIds = new Set((solves || []).map(solve => solve.challenge_id))
 
-    return challenges.map(challenge => ({
+    return (challenges || []).map(challenge => ({
       ...challenge,
       is_solved: solvedChallengeIds.has(challenge.id),
       attachments: challenge.attachments || [],

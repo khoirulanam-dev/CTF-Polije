@@ -105,6 +105,38 @@ export default function Navbar() {
               </Link>
             )}
 
+            {user && (
+              <Link
+                href="/teams"
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition
+                  ${
+                    isActive("/teams")
+                      ? "bg-slate-900/60 text-white ring-1 ring-blue-400/40"
+                      : theme === "dark"
+                      ? "text-slate-200 hover:bg-slate-900/30"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+              >
+                Teams
+              </Link>
+            )}
+
+            {user && (
+              <Link
+                href="/activity"
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition
+                  ${
+                    isActive("/activity")
+                      ? "bg-slate-900/60 text-white ring-1 ring-blue-400/40"
+                      : theme === "dark"
+                      ? "text-slate-200 hover:bg-slate-900/30"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+              >
+                Activity
+              </Link>
+            )}
+
             {!user && (
               <Link
                 href="/rules"
@@ -355,6 +387,20 @@ export default function Navbar() {
                   className="block rounded-lg px-3 py-2 text-sm text-slate-100 hover:bg-slate-900/40"
                 >
                   Scoreboard
+                </Link>
+                <Link
+                  href="/teams"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm text-slate-100 hover:bg-slate-900/40"
+                >
+                  Teams
+                </Link>
+                <Link
+                  href="/activity"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm text-slate-100 hover:bg-slate-900/40"
+                >
+                  Activity
                 </Link>
                 <Link
                   href="/rules"

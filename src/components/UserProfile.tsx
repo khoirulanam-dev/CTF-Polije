@@ -4,7 +4,8 @@ import { ChallengeWithSolve } from "@/types";
 import { getFirstBloodChallengeIds } from "@/lib/challenges";
 import { useEffect, useState, Fragment } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { getUserDetail, getCategoryTotals } from "@/lib/users";
+import { getUserDetail } from "@/lib/users";
+import { CategoryProgress, getUserCategoryProgress } from "@/lib/engagement";
 import { formatRelativeDate } from "@/lib/utils";
 import { motion } from "framer-motion";
 import ImageWithFallback from "./ImageWithFallback";
@@ -240,9 +241,7 @@ export default function UserProfile({
 }: Props) {
   const [userDetail, setUserDetail] = useState<UserDetail | null>(null);
   const [firstBloodIds, setFirstBloodIds] = useState<string[]>([]);
-  const [categoryTotals, setCategoryTotals] = useState<
-    { category: string; total_challenges: number }[]
-  >([]);
+  const [categoryProgress, setCategoryProgress] = useState<CategoryProgress[]>([]);
   const [loadingDetail, setLoadingDetail] = useState<boolean>(true);
   const [showAllModal, setShowAllModal] = useState(false);
   // Modal state removed, handled in EditProfileModal
@@ -263,8 +262,7 @@ export default function UserProfile({
           );
           setFirstBloodIds(firstBlood.filter((id) => solvedIds.has(id)));
 
-          const totals = await getCategoryTotals();
-          setCategoryTotals(totals);
+          setCategoryProgress(await getUserCategoryProgress(detail.id));
         }
       } finally {
         setLoadingDetail(false);
@@ -465,38 +463,43 @@ export default function UserProfile({
             </motion.div>
 
             {/* Category Progress */}
-            {categoryTotals.map(({ category, total_challenges }) => {
-              const solvedInCategory = solvedChallenges.filter(
-                (c) => c.category === category
-              );
-              if (solvedInCategory.length === 0) return null;
-
-              const progress =
-                total_challenges > 0
-                  ? (solvedInCategory.length / total_challenges) * 100
-                  : 0;
-
-              return (
-                <div key={category}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      {category}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-300">
-                      {solvedInCategory.length}/{total_challenges}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${progress}%` }}
-                      transition={{ duration: 0.5 }}
-                      className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full"
-                    />
-                  </div>
-                </div>
-              );
-            })}
+            {categoryProgress.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+              >
+                <Card className="bg-white dark:bg-gray-800">
+                  <CardHeader>
+                    <CardTitle className="text-gray-900 dark:text-white">
+                      Category Progress
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {categoryProgress.map((item) => (
+                      <div key={item.category}>
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            {item.category}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-300">
+                            {item.solved_challenges}/{item.total_challenges} · {item.solved_points} pts
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(Number(item.percentage || 0), 100)}%` }}
+                            transition={{ duration: 0.5 }}
+                            className="h-2 rounded-full bg-blue-600 dark:bg-blue-400"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Recent Solved Challenges */}
             <motion.div
