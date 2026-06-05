@@ -33,6 +33,7 @@ export type TeamSolve = {
 export type TeamLeaderboardEntry = {
   team_id: string
   team_name: string
+  is_solo?: boolean
   member_count: number
   score: number
   last_solve: string | null

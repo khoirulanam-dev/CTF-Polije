@@ -12,6 +12,9 @@ import { useAuth } from "@/contexts/AuthContext"
 import { createTeam, getMyTeam, joinTeam, leaveTeam, MyTeam, TeamMember } from "@/lib/engagement"
 import { formatRelativeDate } from "@/lib/utils"
 
+const teamInputClass =
+  "border-gray-400 bg-white text-gray-900 placeholder:text-gray-500 focus-visible:ring-blue-500 dark:border-gray-500 dark:bg-gray-950/60 dark:text-white dark:placeholder:text-gray-400"
+
 function TeamsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -126,6 +129,7 @@ function TeamsPageContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <Input
+                  className={teamInputClass}
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
                   placeholder="Team name"
@@ -143,6 +147,7 @@ function TeamsPageContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <Input
+                  className={teamInputClass}
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   placeholder="Invite code"

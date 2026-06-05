@@ -27,20 +27,15 @@ export async function getAuditLogs(
   limit = 50,
   offset = 0
 ): Promise<AuditLogEntry[]> {
-  try {
-    const { data, error } = await supabase.rpc("get_auth_audit_logs", {
-      p_limit: limit,
-      p_offset: offset,
-    })
+  const { data, error } = await supabase.rpc("get_auth_audit_logs", {
+    p_limit: limit,
+    p_offset: offset,
+  })
 
-    if (error) {
-      console.error("Error fetching audit logs:", error)
-      return []
-    }
-
-    return (data ?? []) as AuditLogEntry[]
-  } catch (err) {
-    console.error("Error fetching audit logs:", err)
-    return []
+  if (error) {
+    console.error("Error fetching audit logs:", error)
+    throw new Error(error.message)
   }
+
+  return (data ?? []) as AuditLogEntry[]
 }

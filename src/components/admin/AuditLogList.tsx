@@ -82,6 +82,7 @@ const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
   // state internal kalau parent tidak mengirim logs
   const [internalLogs, setInternalLogs] = React.useState<AuditLogEntry[]>([]);
   const [internalLoading, setInternalLoading] = React.useState(false);
+  const [internalError, setInternalError] = React.useState<string | null>(null);
   const [limit, setLimit] = React.useState(50);
 
   const toggleAction = (action: ActionType) => {
@@ -108,12 +109,16 @@ const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
 
       try {
         setInternalLoading(true);
+        setInternalError(null);
         const data = await getAuditLogs(limit);
         if (!mounted) return;
         setInternalLogs(data || []);
       } catch (err) {
         console.error("Error fetching audit logs:", err);
-        if (mounted) setInternalLogs([]);
+        if (mounted) {
+          setInternalLogs([]);
+          setInternalError(err instanceof Error ? err.message : "Failed to fetch audit logs");
+        }
       } finally {
         if (mounted) setInternalLoading(false);
       }
@@ -228,7 +233,15 @@ const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
 
         {/* stats */}
         <div className="text-xs text-gray-500 dark:text-gray-400">
-          {filteredLogs.length} of {sourceLogs.length} logs
+          {internalError ? (
+            <span className="text-red-500 dark:text-red-300">
+              Failed to load audit logs: {internalError}
+            </span>
+          ) : (
+            <>
+              {filteredLogs.length} of {sourceLogs.length} logs
+            </>
+          )}
           {searchQuery && (
             <>
               {" "}
