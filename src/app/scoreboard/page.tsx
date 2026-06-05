@@ -183,11 +183,6 @@ export default function ScoreboardPage() {
                             <td className="py-3 text-center font-mono text-gray-600 dark:text-gray-300">#{entry.rank}</td>
                             <td className="py-3 font-medium text-gray-900 dark:text-white">
                               {entry.team_name}
-                              {entry.is_solo && (
-                                <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                                  Solo
-                                </span>
-                              )}
                             </td>
                             <td className="py-3 text-center text-gray-600 dark:text-gray-300">{entry.member_count}</td>
                             <td className="py-3 text-center font-semibold text-gray-900 dark:text-white">{entry.score}</td>
@@ -195,7 +190,7 @@ export default function ScoreboardPage() {
                         ))}
                         {teamLeaderboard.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="py-8 text-center text-gray-500">No teams yet</td>
+                            <td colSpan={4} className="py-8 text-center text-gray-500">No ranked teams yet</td>
                           </tr>
                         )}
                       </tbody>
