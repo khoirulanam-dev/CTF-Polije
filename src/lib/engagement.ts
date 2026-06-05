@@ -91,10 +91,10 @@ export async function getTeamLeaderboard(period: LeaderboardPeriod = 'all', limi
   return (data || []) as TeamLeaderboardEntry[]
 }
 
-export async function createTeam(name: string, isSolo = false) {
+export async function createTeam(name: string) {
   const { data, error } = await supabase.rpc('create_team', {
     p_name: name,
-    p_is_solo: isSolo,
+    p_is_solo: false,
   })
   if (error) throw error
   return data as { success: boolean; message?: string; team_id?: string; invite_code?: string }

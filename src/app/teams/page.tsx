@@ -27,7 +27,7 @@ function TeamsPageContent() {
   const [submitting, setSubmitting] = useState(false)
 
   const shareLink = useMemo(() => {
-    if (!team || team.is_solo || typeof window === "undefined") return ""
+    if (!team || typeof window === "undefined") return ""
     return `${window.location.origin}/teams?invite=${team.invite_code}`
   }, [team])
 
@@ -54,15 +54,15 @@ function TeamsPageContent() {
     refresh()
   }, [refresh])
 
-  const handleCreate = async (isSolo: boolean) => {
+  const handleCreate = async () => {
     setSubmitting(true)
     try {
-      const res = await createTeam(teamName, isSolo)
+      const res = await createTeam(teamName)
       if (!res.success) {
         toast.error(res.message || "Failed to create team")
         return
       }
-      toast.success(isSolo ? "Solo team created" : "Team created")
+      toast.success("Team created")
       setTeamName("")
       await refresh()
     } catch (err) {
@@ -134,10 +134,7 @@ function TeamsPageContent() {
                   onChange={(e) => setTeamName(e.target.value)}
                   placeholder="Team name"
                 />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button disabled={submitting} onClick={() => handleCreate(false)}>Create Shared Team</Button>
-                  <Button disabled={submitting} variant="outline" onClick={() => handleCreate(true)}>Create Solo Team</Button>
-                </div>
+                <Button disabled={submitting} onClick={handleCreate}>Create Team</Button>
               </CardContent>
             </Card>
 
@@ -163,31 +160,29 @@ function TeamsPageContent() {
                 <div>
                   <CardTitle className="text-gray-900 dark:text-white">{team.name}</CardTitle>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    {team.is_solo ? "Solo team" : `${members.length} members`} · Joined as {team.my_role || "member"}
+                    {members.length} members · Joined as {team.my_role || "member"}
                   </p>
                 </div>
                 <Button variant="outline" disabled={submitting} onClick={handleLeave}>Leave Team</Button>
               </CardHeader>
-              {!team.is_solo && (
-                <CardContent className="space-y-3">
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Invite Code</div>
-                    <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <code className="font-mono text-lg font-semibold text-gray-900 dark:text-white">{team.invite_code}</code>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          navigator.clipboard.writeText(shareLink || team.invite_code)
-                          toast.success("Invite copied")
-                        }}
-                      >
-                        Copy Share Link
-                      </Button>
-                    </div>
+              <CardContent className="space-y-3">
+                <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Invite Code</div>
+                  <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <code className="font-mono text-lg font-semibold text-gray-900 dark:text-white">{team.invite_code}</code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(shareLink || team.invite_code)
+                        toast.success("Invite copied")
+                      }}
+                    >
+                      Copy Share Link
+                    </Button>
                   </div>
-                </CardContent>
-              )}
+                </div>
+              </CardContent>
             </Card>
 
             <Card className="bg-white dark:bg-gray-800">
