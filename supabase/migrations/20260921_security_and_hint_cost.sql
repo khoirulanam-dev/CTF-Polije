@@ -319,6 +319,8 @@ GRANT EXECUTE ON FUNCTION public.submit_flag(uuid, text) TO authenticated;
 -- =========================================================================
 
 -- 6a) get_leaderboard_scoped (Halaman Utama Scoreboard Peserta)
+DROP FUNCTION IF EXISTS public.get_leaderboard_scoped(text, integer, integer);
+
 CREATE OR REPLACE FUNCTION public.get_leaderboard_scoped(
   p_period text DEFAULT 'all',
   p_limit integer DEFAULT 100,
@@ -329,7 +331,8 @@ RETURNS TABLE (
   username text,
   score bigint,
   last_solve timestamptz,
-  rank bigint
+  rank bigint,
+  picture text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -361,7 +364,8 @@ BEGIN
     ranked.username,
     ranked.score,
     ranked.last_solve,
-    ranked.rank
+    ranked.rank,
+    ranked.picture
   FROM (
     SELECT
       filtered.id,
@@ -370,7 +374,8 @@ BEGIN
       filtered.last_solve,
       ROW_NUMBER() OVER (
         ORDER BY filtered.score DESC, filtered.last_solve ASC NULLS LAST, filtered.username ASC
-      ) AS rank
+      ) AS rank,
+      filtered.picture
     FROM (
       SELECT
         u.id,
@@ -379,14 +384,16 @@ BEGIN
         GREATEST(0, COALESCE(SUM(c.points), 0) - COALESCE((
           SELECT SUM(uh.cost) FROM public.unlocked_hints uh WHERE uh.user_id = u.id
         ), 0))::bigint AS score,
-        MAX(s.created_at) AS last_solve
+        MAX(s.created_at) AS last_solve,
+        COALESCE(u.avatar_url, au.raw_user_meta_data->>'picture') AS picture
       FROM public.users u
+      LEFT JOIN auth.users au ON au.id = u.id
       LEFT JOIN public.solves s
         ON s.user_id = u.id
         AND (v_start IS NULL OR s.created_at >= v_start)
         AND (v_cutoff IS NULL OR s.created_at <= v_cutoff)
       LEFT JOIN public.challenges c ON c.id = s.challenge_id
-      GROUP BY u.id, u.username
+      GROUP BY u.id, u.username, u.avatar_url, au.raw_user_meta_data
     ) filtered
     WHERE NOT v_scoped OR filtered.score > 0
   ) ranked

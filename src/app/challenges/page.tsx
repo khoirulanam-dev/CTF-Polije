@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 
+import { supabase } from "@/lib/supabase";
 import {
   getChallenges,
   submitFlag,
@@ -20,6 +21,35 @@ import APP from "@/config";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
+
+// Helper untuk normalisasi field hint
+function normalizeChallengesList(challengesData: any[]): ChallengeWithSolve[] {
+  return challengesData.map((challenge: any) => {
+    let hints: string[] = [];
+    const raw = challenge.hint;
+    if (Array.isArray(raw)) {
+      hints = raw.filter((h: any) => typeof h === "string");
+    } else if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          hints = parsed.filter((h: any) => typeof h === "string");
+        } else if (typeof parsed === "string") {
+          hints = [parsed];
+        } else if (parsed === null) {
+          hints = [];
+        }
+      } catch {
+        if (raw.trim() !== "") hints = [raw];
+      }
+    } else if (raw && typeof raw === "object") {
+      // skip
+    } else if (raw) {
+      hints = [String(raw)];
+    }
+    return { ...challenge, hint: hints };
+  });
+}
 
 // Code-split heavy dialog & chat widget (only loaded on-demand)
 const ChallengeDetailDialog = dynamic(
@@ -70,48 +100,45 @@ export default function ChallengesPage() {
   }, [user, loading, router]);
 
   // ambil challenges
-  useEffect(() => {
-    let mounted = true;
-    const fetchChallenges = async () => {
-      if (!user) return;
+  const fetchChallengesData = useCallback(async () => {
+    if (!user) return;
+    try {
       const challengesData = await getChallenges(user.id);
-      if (!mounted) return;
-
-      // normalisasi field hint
-      const normalized = challengesData.map((challenge: any) => {
-        let hints: string[] = [];
-        const raw = challenge.hint;
-        if (Array.isArray(raw)) {
-          hints = raw.filter((h: any) => typeof h === "string");
-        } else if (typeof raw === "string") {
-          try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              hints = parsed.filter((h: any) => typeof h === "string");
-            } else if (typeof parsed === "string") {
-              hints = [parsed];
-            } else if (parsed === null) {
-              hints = [];
-            }
-          } catch {
-            if (raw.trim() !== "") hints = [raw];
-          }
-        } else if (raw && typeof raw === "object") {
-          // skip
-        } else if (raw) {
-          hints = [String(raw)];
-        }
-        return { ...challenge, hint: hints };
-      });
-
-      setChallenges(normalized);
-    };
-
-    fetchChallenges();
-    return () => {
-      mounted = false;
-    };
+      setChallenges(normalizeChallengesList(challengesData));
+    } catch (err) {
+      console.error("Failed to fetch challenges:", err);
+    }
   }, [user]);
+
+  useEffect(() => {
+    fetchChallengesData();
+  }, [fetchChallengesData]);
+
+  // Real-time: sinkronisasi status solve khusus user ini tanpa beban berat
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`user-challenge-solves-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "solves",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Hanya query jika ada solve baru milik user ini
+          fetchChallengesData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchChallengesData]);
 
   // kalau detail kebuka → ambil solvers
   useEffect(() => {
@@ -414,31 +441,73 @@ export default function ChallengesPage() {
               </p>
             </div>
           ) : (
-            orderedKeys.map((category) => (
-              <section key={category} className="space-y-3">
-                {/* judul kategori */}
-                <div className="flex items-center gap-3">
-                  <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 via-cyan-300 to-blue-600 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
-                  <h2 className="text-[1.35rem] font-extrabold tracking-wider uppercase text-white drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]">
-                    {category}
-                  </h2>
-                  <span className="ml-2 text-xs font-semibold text-sky-400 bg-sky-500/10 px-2 py-[1px] rounded-md border border-sky-600/40">
-                    {grouped[category]?.length || 0} Challenges
-                  </span>
-                </div>
+            orderedKeys.map((category) => {
+              const allCatChalls = challenges.filter(
+                (c) => c.category === category
+              );
+              const totalCat = allCatChalls.length;
+              const solvedCat = allCatChalls.filter((c) => c.is_solved).length;
+              const percentCat =
+                totalCat > 0 ? Math.round((solvedCat / totalCat) * 100) : 0;
+              const isCompleted = totalCat > 0 && solvedCat === totalCat;
 
-                {/* grid challenge */}
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                  {grouped[category]?.map((challenge) => (
-                    <ChallengeCard
-                      key={challenge.id}
-                      challenge={challenge}
-                      onClick={() => setSelectedChallenge(challenge)}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))
+              return (
+                <section key={category} className="space-y-3.5">
+                  {/* Category Card Header & Progress Bar */}
+                  <div className="rounded-2xl bg-slate-900/40 border border-slate-800/80 p-3.5 sm:p-4 backdrop-blur-md shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 via-cyan-300 to-blue-600 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
+                        <h2 className="text-[1.2rem] sm:text-[1.35rem] font-extrabold tracking-wider uppercase text-white drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]">
+                          {category}
+                        </h2>
+                        <span className="text-xs font-semibold text-sky-400 bg-sky-500/10 px-2.5 py-[2px] rounded-md border border-sky-600/40">
+                          {grouped[category]?.length || 0} Challenges
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 text-xs font-semibold">
+                        {isCompleted ? (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.25)]">
+                            <span>✨</span> 100% Mastered
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-slate-800/70 text-slate-300 border border-slate-700/60 font-mono">
+                            {solvedCat} / {totalCat} Solved
+                          </span>
+                        )}
+                        <span className="text-cyan-400 font-mono text-sm font-bold min-w-[36px] text-right">
+                          {percentCat}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar Track */}
+                    <div className="w-full bg-slate-950/80 border border-slate-800/90 rounded-full h-2 overflow-hidden relative p-[1px]">
+                      <div
+                        className={`h-full transition-all duration-700 ease-out rounded-full ${
+                          isCompleted
+                            ? "bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_12px_rgba(16,185,129,0.6)]"
+                            : "bg-gradient-to-r from-blue-500 via-cyan-400 to-teal-400 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+                        }`}
+                        style={{ width: `${percentCat}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* grid challenge */}
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                    {grouped[category]?.map((challenge) => (
+                      <ChallengeCard
+                        key={challenge.id}
+                        challenge={challenge}
+                        onClick={() => setSelectedChallenge(challenge)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })
           )}
         </div>
       </div>

@@ -23,21 +23,27 @@ export default function ScoreboardAllPage() {
         return
       }
 
-      setLoading(true)
-      // Ambil semua data (limit besar)
-      const summary = await getLeaderboardSummary(1000, 0)
-      summary.sort((a: any, b: any) => b.score - a.score)
+      try {
+        // Ambil semua data (limit besar)
+        const summary = await getLeaderboardSummary(1000, 0)
+        summary.sort((a: any, b: any) => b.score - a.score)
 
-      const all = summary.map((t: any, i: number) => ({
-        id: String(i + 1),
-        username: t.username,
-        score: t.score ?? 0,
-        rank: i + 1,
-        progress: [],
-      }))
+        const all = summary.map((t: any, i: number) => ({
+          id: String(i + 1),
+          username: t.username,
+          score: t.score ?? 0,
+          rank: i + 1,
+          picture: t.picture || t.avatar_url || null,
+          progress: [],
+        }))
 
-      setLeaderboard(all)
-      setLoading(false)
+        setLeaderboard(all)
+      } catch (err) {
+        console.error("Failed to fetch all leaderboard:", err)
+        setLeaderboard([])
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchData()

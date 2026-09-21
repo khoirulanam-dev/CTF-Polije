@@ -8,7 +8,7 @@ const ScoreboardChart = dynamic(() => import('@/components/scoreboard/Scoreboard
   ssr: false,
   loading: () => <div className="h-80 w-full animate-pulse bg-slate-800/40 rounded-xl" />,
 });
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Loader from '@/components/custom/loading'
@@ -20,6 +20,7 @@ import { getEventSettings, getScopedLeaderboard, getTeamLeaderboard, Leaderboard
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { LeaderboardEntry } from '@/types'
+import { supabase } from '@/lib/supabase'
 
 export default function ScoreboardPage() {
   const { user, loading: authLoading } = useAuth()
@@ -39,19 +40,18 @@ export default function ScoreboardPage() {
     }
   }, [user, authLoading, router])
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user) {
-        setLoading(false)
-        return
-      }
-      setLoading(true)
+  const fetchData = useCallback(async () => {
+    if (!user) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
 
+    try {
       if (mode === 'teams') {
         const teams = await getTeamLeaderboard(period, 100, 0)
         setTeamLeaderboard(teams)
         setLeaderboard([])
-        setLoading(false)
         return
       }
 
@@ -63,13 +63,14 @@ export default function ScoreboardPage() {
         username: t.username,
         score: t.score ?? 0,
         rank: t.rank ?? i + 1,
+        picture: t.picture || t.avatar_url || null,
         progress: [],
       }))
 
       if (period === 'all') {
         const topForChart = top100.slice(0, 10)
         const topUsernames = topForChart.map((t: any) => t.username)
-        const progressMap = await getTopProgressByUsernames(topUsernames)
+        const progressMap: Record<string, any> = (await getTopProgressByUsernames(topUsernames).catch(() => ({}))) || {}
 
         for (let i = 0; i < topForChart.length; i++) {
           const uname = topForChart[i].username
@@ -80,10 +81,42 @@ export default function ScoreboardPage() {
 
       setLeaderboard(baseLeaderboard)
       setTeamLeaderboard([])
+    } catch (err) {
+      console.error("Failed to load scoreboard data:", err)
+      setLeaderboard([])
+    } finally {
       setLoading(false)
     }
-    fetchData()
   }, [user, period, mode])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // ⚡ Supabase Realtime Listener (Debounced 3 detik agar tidak membebani server)
+  useEffect(() => {
+    if (!user) return
+    let timer: NodeJS.Timeout | null = null
+
+    const channel = supabase
+      .channel('realtime_scoreboard_solves')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'solves' },
+        () => {
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(() => {
+            fetchData()
+          }, 3000)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel)
+    }
+  }, [user, fetchData])
 
   useEffect(() => {
     const fetchEvent = async () => {
