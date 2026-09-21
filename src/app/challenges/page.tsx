@@ -374,7 +374,8 @@ export default function ChallengesPage() {
   if (!user) return null;
 
   return (
-    <div className="relative min-h-screen pt-5 overflow-hidden">
+    <>
+      <div className="relative min-h-screen pt-5 overflow-hidden">
       {/* Background halus berbasis CSS (GPU-accelerated, zero JS main-thread load) */}
       <div
         aria-hidden
@@ -539,7 +540,8 @@ export default function ChallengesPage() {
           setShowHintModal={setShowHintModal}
         />
       )}
+      </div>
       <LiveChatWidget />
-    </div>
+    </>
   );
 }

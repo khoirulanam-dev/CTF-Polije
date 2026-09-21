@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   fetchMessages,
@@ -22,6 +23,7 @@ import {
   StopCircle,
 } from "lucide-react";
 import clsx from "clsx";
+import ImageWithFallback from "@/components/ImageWithFallback";
 
 type Msg = ChatMessage;
 
@@ -37,6 +39,13 @@ type ReactionAgg = {
   emoji: string;
   count: number;
   reactedByMe: boolean;
+  userIds: string[];
+};
+
+type UserProfileMini = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
 };
 
 type MentionUser = {
@@ -55,15 +64,25 @@ const EMOJIS = ["😂", "😮", "🔥", "❤️", "👍", "👎", "🎉", "🤯"
 const QUICK_REACT = ["😂", "🔥", "❤️", "👍"];
 
 export default function LiveChatWidget() {
+  const { user: authUser, loading: authLoading } = useAuth();
+
   // ---------- state ----------
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [cooldownLeft, setCooldownLeft] = useState<number>(0);
 
-  const [userId, setUserId] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [username, setUsername] = useState<string>("User");
+  const [userId, setUserId] = useState<string | null>(authUser?.id || null);
+  const [isAdmin, setIsAdmin] = useState(!!authUser?.is_admin);
+  const [username, setUsername] = useState<string>(
+    authUser?.username || "User"
+  );
+
+  const activeUserId = userId || authUser?.id || null;
+  const activeUsername =
+    (username && username !== "User" ? username : authUser?.username) ||
+    "User";
+  const activeIsAdmin = isAdmin || !!authUser?.is_admin;
 
   const [onlineMap, setOnlineMap] = useState<Record<string, PresenceUser>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
@@ -80,6 +99,35 @@ export default function LiveChatWidget() {
   const [reactionsMap, setReactionsMap] = useState<
     Record<number, ReactionAgg[]>
   >({});
+  const [activeReactMsgId, setActiveReactMsgId] = useState<number | null>(null);
+
+  // user profiles cache (id -> { id, username, avatar_url })
+  const [userProfiles, setUserProfiles] = useState<
+    Record<string, UserProfileMini>
+  >({});
+  const requestedProfileIdsRef = useRef<Set<string>>(new Set());
+
+  // inspect reaction modal state
+  const [inspectReaction, setInspectReaction] = useState<{
+    messageId: number;
+    selectedEmoji?: string | null;
+  } | null>(null);
+
+  // delete confirmation dialog state
+  const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<{
+    id: number;
+    isMine: boolean;
+  } | null>(null);
+
+  // messages deleted for me (locally hidden)
+  const [deletedForMeIds, setDeletedForMeIds] = useState<Set<number>>(new Set());
+
+  // unread message counter (when closed)
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   // voice note
   const [recording, setRecording] = useState(false);
@@ -161,38 +209,60 @@ export default function LiveChatWidget() {
     return !!onlineMap[uid];
   }
 
+  // Sync from AuthContext
+  useEffect(() => {
+    if (authUser?.id) {
+      requestedProfileIdsRef.current.add(authUser.id);
+      setUserId(authUser.id);
+      setUsername(authUser.username || authUser.id.slice(0, 8));
+      setIsAdmin(!!authUser.is_admin);
+      setUserProfiles((prev) => ({
+        ...prev,
+        [authUser.id]: {
+          id: authUser.id,
+          username: authUser.username || authUser.id.slice(0, 8),
+          avatar_url: authUser.avatar_url || null,
+        },
+      }));
+    }
+  }, [authUser]);
+
   // ---------- auth + admin check + get platform username ----------
   useEffect(() => {
     let mounted = true;
 
     async function initAuth() {
-      const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id ?? null;
-      if (!mounted) return;
-
-      setUserId(uid);
-      if (!uid) return;
-
       try {
-        // ✅ FIX: jangan select kolom "admin" (tidak ada di tabel)
-        const { data, error } = await supabase
-          .from("users")
-          .select("is_admin, username")
-          .eq("id", uid)
-          .single();
+        const { data: auth } = await supabase.auth.getUser();
+        const uid = auth?.user?.id ?? authUser?.id ?? null;
+        if (!mounted) return;
 
-        if (error) throw error;
+        if (uid) {
+          setUserId(uid);
+          requestedProfileIdsRef.current.add(uid);
+          const { data, error } = await supabase
+            .from("users")
+            .select("is_admin, username, avatar_url")
+            .eq("id", uid)
+            .single();
 
-        const adminFlag = !!data?.is_admin; // ✅ cukup dari is_admin
-        setIsAdmin(adminFlag);
-
-        let uname = (data?.username || "").trim();
-        if (!uname) uname = uid.slice(0, 8); // fallback terakhir
-
-        setUsername(uname);
-      } catch {
-        setUsername(uid.slice(0, 8));
-        setIsAdmin(false);
+          if (!error && data && mounted) {
+            setIsAdmin(!!data.is_admin);
+            let uname = (data.username || "").trim();
+            if (!uname) uname = uid.slice(0, 8);
+            setUsername(uname);
+            setUserProfiles((prev) => ({
+              ...prev,
+              [uid]: {
+                id: uid,
+                username: uname,
+                avatar_url: data.avatar_url || null,
+              },
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("LiveChatWidget initAuth fallback to useAuth:", err);
       }
     }
 
@@ -200,11 +270,138 @@ export default function LiveChatWidget() {
     return () => {
       mounted = false;
     };
+  }, [authUser?.id]);
+
+  // load messages deleted locally ("Hapus untuk saya")
+  useEffect(() => {
+    if (!activeUserId) return;
+    try {
+      const stored = localStorage.getItem(`chat_deleted_for_me_${activeUserId}`);
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) {
+          setDeletedForMeIds(new Set(arr));
+        }
+      }
+    } catch {}
+  }, [activeUserId]);
+
+  // messages visible to this user
+  const visibleMsgs = useMemo(() => {
+    return msgs.filter((m) => !deletedForMeIds.has(m.id));
+  }, [msgs, deletedForMeIds]);
+
+  // Helper untuk mengambil avatar & username user yang belum ada di cache
+  const fetchMissingUserProfiles = useCallback((ids: string[]) => {
+    if (!ids || !ids.length) return;
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    const missing = unique.filter((id) => !requestedProfileIdsRef.current.has(id));
+    if (missing.length === 0) return;
+
+    missing.forEach((id) => requestedProfileIdsRef.current.add(id));
+
+    supabase
+      .from("users")
+      .select("id, username, avatar_url")
+      .in("id", missing)
+      .then(
+        ({ data }) => {
+          if (data && data.length > 0) {
+            setUserProfiles((current) => {
+              const updated = { ...current };
+              data.forEach((u: any) => {
+                updated[u.id] = {
+                  id: u.id,
+                  username: u.username || u.id.slice(0, 8),
+                  avatar_url: u.avatar_url || null,
+                };
+              });
+              return updated;
+            });
+          }
+        },
+        () => {}
+      );
   }, []);
+
+  const refreshReactions = useCallback(
+    (messageIds: number[]) => {
+      if (!messageIds.length) return;
+      fetchReactions(messageIds)
+        .then((rows: any[]) => {
+          const agg: Record<number, Record<string, ReactionAgg>> = {};
+          const reactionUids: string[] = [];
+          for (const r of rows) {
+            const mid = r.message_id as number;
+            const emoji = r.emoji as string;
+            const uid = r.user_id as string;
+            if (uid) reactionUids.push(uid);
+            if (!agg[mid]) agg[mid] = {};
+            if (!agg[mid][emoji]) {
+              agg[mid][emoji] = {
+                emoji,
+                count: 0,
+                reactedByMe: false,
+                userIds: [],
+              };
+            }
+            agg[mid][emoji].count += 1;
+            if (uid && !agg[mid][emoji].userIds.includes(uid)) {
+              agg[mid][emoji].userIds.push(uid);
+            }
+            if (r.user_id === userId) agg[mid][emoji].reactedByMe = true;
+          }
+          const out: Record<number, ReactionAgg[]> = {};
+          Object.keys(agg).forEach((midStr) => {
+            const mid = Number(midStr);
+            out[mid] = Object.values(agg[mid]);
+          });
+          setReactionsMap(out);
+
+          if (reactionUids.length) {
+            fetchMissingUserProfiles(reactionUids);
+          }
+        })
+        .catch(() => {});
+    },
+    [userId, fetchMissingUserProfiles]
+  );
+
+  // ---------- inspect reaction derived states ----------
+  const inspectMessageReactions = useMemo(() => {
+    if (!inspectReaction) return [];
+    return reactionsMap[inspectReaction.messageId] || [];
+  }, [inspectReaction, reactionsMap]);
+
+  const totalInspectReactions = useMemo(() => {
+    return inspectMessageReactions.reduce((acc, r) => acc + r.count, 0);
+  }, [inspectMessageReactions]);
+
+  const inspectUserList = useMemo(() => {
+    if (!inspectReaction) return [];
+    const list: { userId: string; emoji: string }[] = [];
+    inspectMessageReactions.forEach((r) => {
+      if (!inspectReaction.selectedEmoji || inspectReaction.selectedEmoji === r.emoji) {
+        r.userIds.forEach((uid) => {
+          list.push({ userId: uid, emoji: r.emoji });
+        });
+      }
+    });
+    return list;
+  }, [inspectReaction, inspectMessageReactions]);
+
+  useEffect(() => {
+    if (!inspectReaction) return;
+    const list = reactionsMap[inspectReaction.messageId] || [];
+    const uids = list.flatMap((r) => r.userIds);
+    if (uids.length) {
+      fetchMissingUserProfiles(uids);
+    }
+  }, [inspectReaction, reactionsMap, fetchMissingUserProfiles]);
 
   // ---------- fetch mention users (RPC) ----------
   useEffect(() => {
-    if (!userId || !open) return;
+    if (!activeUserId || !open) return;
 
     (async () => {
       try {
@@ -216,14 +413,14 @@ export default function LiveChatWidget() {
 
         let list: MentionUser[] =
           (data || [])
-            .filter((u: any) => u.username && u.id !== userId)
+            .filter((u: any) => u.username && u.id !== activeUserId)
             .map((u: any) => ({
               id: u.id as string,
               username: String(u.username),
               is_admin: !!u.is_admin,
             })) || [];
 
-        if (isAdmin) {
+        if (activeIsAdmin) {
           list = [{ id: "all", username: "all", is_admin: true }, ...list];
         }
 
@@ -232,17 +429,59 @@ export default function LiveChatWidget() {
         showNotice("mention hanya tampil jika policy select aktif");
       }
     })();
-  }, [userId, isAdmin, open]);
+  }, [activeUserId, activeIsAdmin, open]);
 
-  // ---------- load messages when opened ----------
+  // ---------- load messages on mount or when opened ----------
   useEffect(() => {
-    if (!open) return;
+    if (!activeUserId) return;
     fetchMessages(CHAT_ROOM)
-      .then((data) => setMsgs((data || []) as Msg[]))
-      .catch(() => setMsgs([]));
-  }, [open]);
+      .then((data) => {
+        const list = (data || []) as Msg[];
+        setMsgs(list);
 
-  // ---------- realtime chat (INSERT + DELETE) ----------
+        try {
+          const stored = localStorage.getItem(`chat_last_read_id_${activeUserId}`);
+          if (stored !== null) {
+            const lastReadId = Number(stored);
+            if (!isNaN(lastReadId)) {
+              const unread = list.filter(
+                (m) =>
+                  m.id > lastReadId &&
+                  m.sender_id !== activeUserId &&
+                  m.content !== "__DELETED_FOR_EVERYONE__" &&
+                  !deletedForMeIds.has(m.id)
+              ).length;
+              setUnreadCount(openRef.current ? 0 : unread);
+            }
+          } else {
+            // First time: initialize to latest message so user starts with 0
+            const latestId =
+              list.length > 0 ? Math.max(...list.map((m) => m.id)) : 0;
+            localStorage.setItem(
+              `chat_last_read_id_${activeUserId}`,
+              String(latestId)
+            );
+            setUnreadCount(0);
+          }
+        } catch {}
+      })
+      .catch(() => setMsgs([]));
+  }, [activeUserId, deletedForMeIds]);
+
+  // ---------- mark as read when chat is opened ----------
+  useEffect(() => {
+    if (open) {
+      setUnreadCount(0);
+      if (msgs.length > 0 && activeUserId) {
+        const latestId = Math.max(...msgs.map((m) => m.id));
+        try {
+          localStorage.setItem(`chat_last_read_id_${activeUserId}`, String(latestId));
+        } catch {}
+      }
+    }
+  }, [open, msgs, activeUserId]);
+
+  // ---------- realtime chat (INSERT + DELETE + REACTIONS) ----------
   useEffect(() => {
     const ch = supabase
       .channel("global-chat")
@@ -257,17 +496,28 @@ export default function LiveChatWidget() {
         (payload) => {
           const m = payload.new as Msg;
 
-          if (m.sender_id === userId) {
-            m.sender_name = username;
-            m.sender_role = isAdmin ? "admin" : "user";
+          if (m.sender_id === activeUserId) {
+            m.sender_name = activeUsername;
+            m.sender_role = activeIsAdmin ? "admin" : "user";
+          } else if (m.sender_id) {
+            fetchMissingUserProfiles([m.sender_id]);
           }
 
           setMsgs((prev) => [...prev, m]);
 
+          // Increment unread count if chat is closed and message is not mine
           if (
-            username &&
-            m.sender_id !== userId &&
-            new RegExp(`@${username}\\b`, "i").test(m.content || "")
+            !openRef.current &&
+            m.sender_id !== activeUserId &&
+            m.content !== "__DELETED_FOR_EVERYONE__"
+          ) {
+            setUnreadCount((prev) => prev + 1);
+          }
+
+          if (
+            activeUsername &&
+            m.sender_id !== activeUserId &&
+            new RegExp(`@${activeUsername}\\b`, "i").test(m.content || "")
           ) {
             showNotice(`📣 Kamu di-mention oleh ${m.sender_name || "User"}!`);
             try {
@@ -278,7 +528,7 @@ export default function LiveChatWidget() {
           }
 
           if (
-            m.sender_id !== userId &&
+            m.sender_id !== activeUserId &&
             /\@all\b/i.test(m.content || "") &&
             m.sender_role === "admin"
           ) {
@@ -288,6 +538,23 @@ export default function LiveChatWidget() {
               audio.volume = 0.35;
               audio.play().catch(() => {});
             } catch {}
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chat_messages",
+          filter: `room=eq.${CHAT_ROOM}`,
+        },
+        (payload) => {
+          const updated = payload.new as Msg;
+          if (updated && updated.id) {
+            setMsgs((prev) =>
+              prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x))
+            );
           }
         }
       )
@@ -310,6 +577,22 @@ export default function LiveChatWidget() {
           });
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_reactions",
+        },
+        () => {
+          setMsgs((current) => {
+            if (current.length) {
+              refreshReactions(current.map((m) => m.id));
+            }
+            return current;
+          });
+        }
+      )
       .subscribe();
 
     chatChannelRef.current = ch;
@@ -319,14 +602,14 @@ export default function LiveChatWidget() {
         supabase.removeChannel(chatChannelRef.current);
       chatChannelRef.current = null;
     };
-  }, [username, userId, isAdmin]);
+  }, [activeUsername, activeUserId, activeIsAdmin, fetchMissingUserProfiles, refreshReactions]);
 
   // ---------- presence (online users + typing broadcast) ----------
   useEffect(() => {
-    if (!userId || !open) return;
+    if (!activeUserId || !open) return;
 
     const presence = supabase.channel("presence-global-chat", {
-      config: { presence: { key: userId } },
+      config: { presence: { key: activeUserId } },
     });
 
     presence.on("presence", { event: "sync" }, () => {
@@ -348,14 +631,14 @@ export default function LiveChatWidget() {
 
       const tmap: Record<string, string> = {};
       Object.values(map).forEach((u) => {
-        if (u.typing && u.id !== userId) tmap[u.id] = u.name;
+        if (u.typing && u.id !== activeUserId) tmap[u.id] = u.name;
       });
       setTypingUsers(tmap);
     });
 
     presence.on("broadcast", { event: "typing" }, ({ payload }) => {
       const { uid, name: uname, typing } = payload || {};
-      if (!uid || uid === userId) return;
+      if (!uid || uid === activeUserId) return;
 
       setTypingUsers((prev) => {
         const next = { ...prev };
@@ -373,9 +656,9 @@ export default function LiveChatWidget() {
     presence.subscribe(async (status: string) => {
       if (status === "SUBSCRIBED") {
         await presence.track({
-          id: userId,
-          name: username || "User",
-          role: isAdmin ? "admin" : "user",
+          id: activeUserId,
+          name: activeUsername || "User",
+          role: activeIsAdmin ? "admin" : "user",
           typing: false,
           lastTypingAt: 0,
         });
@@ -389,12 +672,16 @@ export default function LiveChatWidget() {
         supabase.removeChannel(presenceChannelRef.current);
       presenceChannelRef.current = null;
     };
-  }, [userId, username, isAdmin, open]);
+  }, [activeUserId, activeUsername, activeIsAdmin, open]);
 
   // ---------- autoscroll ----------
   useEffect(() => {
     if (!open) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const timer = setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 80);
+    return () => clearTimeout(timer);
   }, [msgs, open]);
 
   // ---------- cooldown countdown timer ----------
@@ -418,46 +705,39 @@ export default function LiveChatWidget() {
   useEffect(() => {
     if (!msgs.length) return;
     const ids = msgs.map((m) => m.id);
-    fetchReactions(ids)
-      .then((rows: any[]) => {
-        const agg: Record<number, Record<string, ReactionAgg>> = {};
-        for (const r of rows) {
-          const mid = r.message_id as number;
-          const emoji = r.emoji as string;
-          if (!agg[mid]) agg[mid] = {};
-          if (!agg[mid][emoji]) {
-            agg[mid][emoji] = { emoji, count: 0, reactedByMe: false };
-          }
-          agg[mid][emoji].count += 1;
-          if (r.user_id === userId) agg[mid][emoji].reactedByMe = true;
-        }
-        const out: Record<number, ReactionAgg[]> = {};
-        Object.keys(agg).forEach((midStr) => {
-          const mid = Number(midStr);
-          out[mid] = Object.values(agg[mid]);
-        });
-        setReactionsMap(out);
-      })
-      .catch(() => {});
-  }, [msgs, userId]);
+    const senderIds = msgs.map((m) => m.sender_id).filter(Boolean);
+    if (activeUserId) senderIds.push(activeUserId);
+    fetchMissingUserProfiles(senderIds);
+
+    refreshReactions(ids);
+  }, [msgs, activeUserId, fetchMissingUserProfiles, refreshReactions]);
 
   async function onReact(mid: number, emoji: string) {
-    if (!userId) return;
+    if (!activeUserId) return;
     try {
-      await toggleReaction(mid, emoji, userId);
+      await toggleReaction(mid, emoji, activeUserId);
       setReactionsMap((prev) => {
         const list = prev[mid] ? [...prev[mid]] : [];
         const idx = list.findIndex((x) => x.emoji === emoji);
         if (idx === -1) {
-          list.push({ emoji, count: 1, reactedByMe: true });
+          list.push({
+            emoji,
+            count: 1,
+            reactedByMe: true,
+            userIds: [activeUserId],
+          });
         } else {
           const it = list[idx];
           if (it.reactedByMe) {
             const newCount = it.count - 1;
+            const newUserIds = (it.userIds || []).filter((id) => id !== activeUserId);
             if (newCount <= 0) list.splice(idx, 1);
-            else list[idx] = { ...it, count: newCount, reactedByMe: false };
+            else list[idx] = { ...it, count: newCount, reactedByMe: false, userIds: newUserIds };
           } else {
-            list[idx] = { ...it, count: it.count + 1, reactedByMe: true };
+            const newUserIds = (it.userIds || []).includes(activeUserId)
+              ? it.userIds
+              : [...(it.userIds || []), activeUserId];
+            list[idx] = { ...it, count: it.count + 1, reactedByMe: true, userIds: newUserIds };
           }
         }
         return { ...prev, [mid]: list };
@@ -469,7 +749,7 @@ export default function LiveChatWidget() {
 
   // ---------- typing handler ----------
   function emitTyping(isTyping: boolean) {
-    if (!presenceChannelRef.current || !userId) return;
+    if (!presenceChannelRef.current || !activeUserId) return;
 
     const now = Date.now();
     if (now - typingThrottleRef.current < 500 && isTyping) return;
@@ -478,13 +758,13 @@ export default function LiveChatWidget() {
     presenceChannelRef.current.send({
       type: "broadcast",
       event: "typing",
-      payload: { uid: userId, name: username || "User", typing: isTyping },
+      payload: { uid: activeUserId, name: activeUsername || "User", typing: isTyping },
     });
 
     presenceChannelRef.current.track({
-      id: userId,
-      name: username || "User",
-      role: isAdmin ? "admin" : "user",
+      id: activeUserId,
+      name: activeUsername || "User",
+      role: activeIsAdmin ? "admin" : "user",
       typing: isTyping,
       lastTypingAt: now,
     });
@@ -525,7 +805,7 @@ export default function LiveChatWidget() {
 
   // ---------- send message ----------
   async function onSend(attachment?: ChatAttachment | null) {
-    if (!userId) return;
+    if (!activeUserId) return;
 
     const now = Date.now();
     const elapsed = now - lastSendAtRef.current;
@@ -550,9 +830,9 @@ export default function LiveChatWidget() {
 
     try {
       await sendMessage(
-        userId,
-        isAdmin ? "admin" : "user",
-        username,
+        activeUserId,
+        activeIsAdmin ? "admin" : "user",
+        activeUsername,
         cleaned,
         {
           ...(replyTo
@@ -579,14 +859,74 @@ export default function LiveChatWidget() {
     }
   }
 
-  // ---------- admin delete ----------
-  async function onDeleteMessage(mid: number) {
-    if (!isAdmin) return;
+  // ---------- delete handlers ----------
+  async function handleDeleteForEveryone(mid: number) {
+    // 1. Optimistic update locally for instant feedback (0ms delay)
+    setMsgs((prev) =>
+      prev.map((m) =>
+        m.id === mid
+          ? {
+              ...m,
+              content: "__DELETED_FOR_EVERYONE__",
+              attachment_url: null,
+              attachment_name: null,
+              attachment_size: null,
+              attachment_mime: null,
+              attachment_type: null,
+            }
+          : m
+      )
+    );
+    setReactionsMap((prev) => {
+      const next = { ...prev };
+      delete next[mid];
+      return next;
+    });
+
     try {
-      await supabase.from("chat_messages").delete().eq("id", mid);
-    } catch {
-      showNotice("Gagal menghapus pesan.");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch("/api/chat/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ messageId: mid }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal menghapus pesan.");
+      }
+    } catch (err: any) {
+      showNotice(err?.message || "Gagal menghapus pesan.");
     }
+  }
+
+  function handleDeleteForMe(mid: number) {
+    // 1. Save to local storage for current user
+    setDeletedForMeIds((prev) => {
+      const next = new Set(prev);
+      next.add(mid);
+      if (activeUserId) {
+        try {
+          localStorage.setItem(
+            `chat_deleted_for_me_${activeUserId}`,
+            JSON.stringify(Array.from(next))
+          );
+        } catch {}
+      }
+      return next;
+    });
+
+    // 2. Optimistically remove from state immediately
+    setMsgs((prev) => prev.filter((m) => m.id !== mid));
+    setReactionsMap((prev) => {
+      const next = { ...prev };
+      delete next[mid];
+      return next;
+    });
   }
 
   // ---------- attachment upload handlers ----------
@@ -597,9 +937,9 @@ export default function LiveChatWidget() {
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !userId) return;
+    if (!file || !activeUserId) return;
     try {
-      const att = await uploadAttachment(file, userId, CHAT_ROOM);
+      const att = await uploadAttachment(file, activeUserId, CHAT_ROOM);
       await onSend(att);
     } catch (err: any) {
       showNotice(err?.message || "Upload gagal.");
@@ -623,8 +963,8 @@ export default function LiveChatWidget() {
           type: "audio/webm",
         });
         try {
-          if (!userId) return;
-          const att = await uploadAttachment(file, userId, CHAT_ROOM);
+          if (!activeUserId) return;
+          const att = await uploadAttachment(file, activeUserId, CHAT_ROOM);
           await onSend(att);
         } catch (err: any) {
           showNotice(err?.message || "Voice note gagal.");
@@ -647,22 +987,31 @@ export default function LiveChatWidget() {
     setRecording(false);
   }
 
-  if (!userId) return null;
+  if (!activeUserId && !authLoading) return null;
 
   return (
     <>
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-400 px-4 py-2.5 text-white font-bold text-sm shadow-[0_4px_25px_rgba(6,182,212,0.45)] hover:shadow-[0_4px_30px_rgba(6,182,212,0.7)] border border-cyan-200/40 hover:scale-105 active:scale-95 transition-all duration-200"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-          </span>
-          <MessageSquare className="h-4 w-4 drop-shadow-sm" />
-          <span>Live Chat</span>
-        </button>
+        <div className="fixed bottom-5 right-5 z-50">
+          <button
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-2.5 rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-400 px-4 py-2.5 text-white font-bold text-sm shadow-[0_4px_25px_rgba(6,182,212,0.45)] hover:shadow-[0_4px_30px_rgba(6,182,212,0.7)] border border-cyan-200/40 hover:scale-105 active:scale-95 transition-all duration-200"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+            </span>
+            <MessageSquare className="h-4 w-4 drop-shadow-sm" />
+            <span>Live Chat</span>
+          </button>
+
+          {/* WhatsApp-style unread message counter badge */}
+          {unreadCount > 0 && (
+            <span className="absolute -top-2 -right-2 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-emerald-500 px-1.5 text-xs font-black text-white shadow-[0_2px_12px_rgba(16,185,129,0.7)] ring-2 ring-zinc-950 animate-bounce pointer-events-none z-10">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </div>
       )}
 
       <div
@@ -697,14 +1046,181 @@ export default function LiveChatWidget() {
           </div>
         )}
 
+        {/* Delete Confirmation Modal */}
+        {confirmDeleteMsg && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+            <div className="w-full max-w-[290px] rounded-2xl border border-white/10 bg-zinc-900 p-4 shadow-2xl space-y-3">
+              <div className="flex items-center gap-2.5 text-white">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-400 ring-1 ring-red-500/30">
+                  <Trash2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">Hapus pesan?</div>
+                  <div className="text-[11px] text-white/50">Pilih opsi penghapusan</div>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                {confirmDeleteMsg.isMine && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const mid = confirmDeleteMsg.id;
+                      setConfirmDeleteMsg(null);
+                      handleDeleteForEveryone(mid);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 px-3 py-2 text-xs font-semibold text-white shadow-sm active:scale-95 transition-all cursor-pointer"
+                  >
+                    Hapus untuk semua orang
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mid = confirmDeleteMsg.id;
+                    setConfirmDeleteMsg(null);
+                    handleDeleteForMe(mid);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/15 px-3 py-2 text-xs font-medium text-white active:scale-95 transition-all cursor-pointer"
+                >
+                  Hapus untuk saya
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteMsg(null)}
+                  className="w-full rounded-xl py-1.5 text-xs text-white/50 hover:text-white transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inspect Reaction Modal Overlay */}
+        {inspectReaction && (
+          <div className="absolute inset-0 z-40 flex flex-col rounded-2xl bg-zinc-950/95 backdrop-blur-md animate-in fade-in duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 bg-zinc-900/90">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-white">Reaksi Pesan</span>
+                <span className="text-xs text-white/50">
+                  ({totalInspectReactions})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectReaction(null)}
+                className="rounded-lg p-1 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                title="Tutup"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Emoji Filter Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto px-3 py-2 border-b border-white/10 bg-zinc-900/40">
+              <button
+                type="button"
+                onClick={() =>
+                  setInspectReaction((prev) => (prev ? { ...prev, selectedEmoji: null } : null))
+                }
+                className={clsx(
+                  "rounded-full px-2.5 py-1 text-xs font-medium transition-colors shrink-0",
+                  !inspectReaction.selectedEmoji
+                    ? "bg-purple-600 text-white shadow-sm"
+                    : "bg-white/5 text-white/70 hover:bg-white/10"
+                )}
+              >
+                Semua {totalInspectReactions}
+              </button>
+              {inspectMessageReactions.map((r) => (
+                <button
+                  key={r.emoji}
+                  type="button"
+                  onClick={() =>
+                    setInspectReaction((prev) => (prev ? { ...prev, selectedEmoji: r.emoji } : null))
+                  }
+                  className={clsx(
+                    "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors shrink-0",
+                    inspectReaction.selectedEmoji === r.emoji
+                      ? "bg-purple-600 text-white ring-1 ring-purple-400 shadow-sm"
+                      : "bg-white/5 text-white/70 hover:bg-white/10"
+                  )}
+                >
+                  <span>{r.emoji}</span>
+                  <span>{r.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* User List */}
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+              {inspectUserList.length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-xs text-white/40">
+                  Tidak ada reaksi
+                </div>
+              ) : (
+                inspectUserList.map((item, idx) => {
+                  const profile = userProfiles[item.userId];
+                  const isMe = item.userId === userId;
+                  const uname = isMe ? `${username} (Anda)` : profile?.username || `User_${item.userId.slice(0, 6)}`;
+                  const avatar = isMe ? (userProfiles[userId || ""]?.avatar_url || profile?.avatar_url) : profile?.avatar_url;
+
+                  return (
+                    <div
+                      key={`${item.userId}-${item.emoji}-${idx}`}
+                      className="flex items-center justify-between rounded-xl bg-white/[0.04] hover:bg-white/[0.08] p-2 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <ImageWithFallback
+                          src={avatar}
+                          alt={uname}
+                          size={32}
+                          className="shrink-0 rounded-full ring-1 ring-white/10"
+                        />
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-white truncate max-w-[170px]">
+                            {uname}
+                          </div>
+                          {isMe && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onReact(inspectReaction.messageId, item.emoji);
+                              }}
+                              className="text-[10px] text-red-400 hover:text-red-300 hover:underline cursor-pointer"
+                            >
+                              Hapus reaksi
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-base shrink-0 select-none pl-2">
+                        {item.emoji}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
         <div
           className={clsx(
             "relative h-[380px] overflow-y-auto px-3 py-3 text-sm",
             "bg-[radial-gradient(ellipse_at_top,_rgba(168,85,247,0.10)_0%,_transparent_60%),radial-gradient(ellipse_at_bottom,_rgba(59,130,246,0.10)_0%,_transparent_60%),linear-gradient(180deg,_rgba(0,0,0,0.9)_0%,_rgba(0,0,0,0.7)_100%)]"
           )}
         >
-          {msgs.map((m) => {
-            const isMine = m.sender_id === userId;
+          {visibleMsgs.map((m) => {
+            const isMine = m.sender_id === activeUserId;
+            const isDeletedForEveryone =
+              m.content === "__DELETED_FOR_EVERYONE__" ||
+              m.content === "Pesan telah dihapus";
+
             const bubbleClass = isMine
               ? "bg-purple-600 text-white"
               : m.sender_role === "admin"
@@ -713,139 +1229,242 @@ export default function LiveChatWidget() {
 
             const reacts = reactionsMap[m.id] || [];
 
+            const senderProfile =
+              userProfiles[m.sender_id] ||
+              (isMine ? userProfiles[activeUserId || ""] : null);
+            const senderAvatar = isMine
+              ? userProfiles[activeUserId || ""]?.avatar_url ||
+                senderProfile?.avatar_url
+              : senderProfile?.avatar_url;
+            const senderDisplayName = isMine
+              ? activeUsername
+              : m.sender_role === "admin"
+              ? "Admin"
+              : senderProfile?.username ||
+                m.sender_name?.trim() ||
+                m.sender_id?.slice(0, 8) ||
+                "User";
+
             return (
               <div
                 key={m.id}
                 className={clsx(
-                  "group my-1 flex items-end gap-2",
-                  isMine ? "justify-end" : "justify-start"
+                  "group relative my-2 flex flex-col",
+                  isMine ? "items-end" : "items-start"
                 )}
               >
-                <div className="max-w-[80%]">
+                {/* Floating Reaction Picker (WhatsApp style - absolute floating above the bubble) */}
+                {!isDeletedForEveryone && activeReactMsgId === m.id && (
                   <div
                     className={clsx(
-                      "rounded-2xl px-3 py-2 shadow-sm",
-                      bubbleClass
+                      "absolute z-30 -top-8 flex items-center gap-1 rounded-full bg-zinc-900/95 border border-white/20 p-1 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95",
+                      isMine ? "right-8" : "left-8"
                     )}
                   >
-                    <div className="text-[11px] opacity-80 mb-1 font-medium">
-                      {isMine
-                        ? username
-                        : m.sender_role === "admin"
-                        ? "Admin"
-                        : m.sender_name?.trim() ||
-                          m.sender_id?.slice(0, 8) ||
-                          "User"}
-                    </div>
-
-                    {m.reply_to_id && (
-                      <div className="mb-2 rounded-xl bg-black/25 px-2 py-1.5 text-[11px] border border-white/10">
-                        <div className="opacity-80 font-semibold">
-                          Reply to {m.reply_to_name || "User"}
-                        </div>
-                        <div className="opacity-70">
-                          {m.reply_to_content || "(pesan)"}
-                        </div>
-                      </div>
-                    )}
-
-                    {m.content && (
-                      <div className="whitespace-pre-wrap break-words">
-                        {m.content}
-                      </div>
-                    )}
-
-                    {m.attachment_url && (
-                      <div className="mt-2">
-                        {m.attachment_type === "image" ? (
-                          <img
-                            src={m.attachment_url}
-                            alt={m.attachment_name || "image"}
-                            className="max-h-60 rounded-xl border border-white/10 object-contain"
-                          />
-                        ) : m.attachment_type === "pdf" ? (
-                          <a
-                            href={m.attachment_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                          >
-                            📄 {m.attachment_name || "file.pdf"}
-                          </a>
-                        ) : m.attachment_type === "audio" ? (
-                          <audio
-                            controls
-                            src={m.attachment_url}
-                            className="w-full"
-                          />
-                        ) : (
-                          <a
-                            href={m.attachment_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                          >
-                            📎 {m.attachment_name || "file"}
-                          </a>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mt-1 text-[10px] opacity-60">
-                      {new Date(m.created_at).toLocaleTimeString()}
-                    </div>
-                  </div>
-
-                  {reacts.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {reacts.map((r) => (
-                        <button
-                          key={r.emoji}
-                          onClick={() => onReact(m.id, r.emoji)}
-                          className={clsx(
-                            "rounded-full px-2 py-0.5 text-[11px] border border-white/10 bg-white/5 hover:bg-white/10",
-                            r.reactedByMe && "ring-1 ring-purple-400/60"
-                          )}
-                        >
-                          {r.emoji} {r.count}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mb-1 flex items-center gap-1">
-                  <div className="hidden items-center gap-1 group-hover:flex">
                     {QUICK_REACT.map((e) => (
                       <button
                         key={e}
-                        onClick={() => onReact(m.id, e)}
-                        className="rounded-lg bg-white/10 p-1 text-white/70 hover:bg-white/20 hover:text-white"
+                        type="button"
+                        onClick={() => {
+                          onReact(m.id, e);
+                          setActiveReactMsgId(null);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/20 hover:scale-125 transition-all text-sm select-none"
+                        title={e}
                       >
-                        <span className="text-sm">{e}</span>
+                        {e}
                       </button>
                     ))}
                   </div>
+                )}
 
-                  <button
-                    onClick={() => {
-                      setReplyTo(m);
-                      setOpen(true);
-                    }}
-                    className="hidden rounded-lg bg-white/10 p-1 text-white/70 hover:bg-white/20 hover:text-white group-hover:inline-flex"
-                  >
-                    <Reply className="h-4 w-4" />
-                  </button>
-
-                  {isAdmin && (
-                    <button
-                      onClick={() => onDeleteMessage(m.id)}
-                      className="hidden rounded-lg bg-red-500/15 p-1 text-red-300 hover:bg-red-500/30 group-hover:inline-flex"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                {/* Message Bubble + Avatar Row */}
+                <div
+                  className={clsx(
+                    "flex items-start gap-2 max-w-[88%]",
+                    isMine ? "flex-row-reverse" : "flex-row"
                   )}
+                >
+                  <ImageWithFallback
+                    src={senderAvatar}
+                    alt={senderDisplayName}
+                    size={28}
+                    className="shrink-0 mt-0.5 rounded-full ring-1 ring-white/10 shadow-sm"
+                  />
+
+                  <div className="relative min-w-0">
+                    <div
+                      className={clsx(
+                        "rounded-2xl px-3 py-2 shadow-sm transition-all",
+                        isDeletedForEveryone
+                          ? "border border-white/10 bg-zinc-900/50 text-white/50"
+                          : bubbleClass
+                      )}
+                    >
+                      <div className="text-[11px] opacity-80 mb-1 font-medium flex items-center gap-1.5">
+                        <span className="truncate max-w-[140px]">
+                          {senderDisplayName}
+                        </span>
+                        {m.sender_role === "admin" && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                            admin
+                          </span>
+                        )}
+                      </div>
+
+                      {isDeletedForEveryone ? (
+                        <div className="flex items-center gap-1.5 py-1 text-xs italic text-white/50 select-none">
+                          <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/50">
+                            <X className="h-2.5 w-2.5 stroke-[2.5]" />
+                          </div>
+                          <span>Pesan telah dihapus</span>
+                        </div>
+                      ) : (
+                        <>
+                          {m.reply_to_id && (
+                            <div className="mb-2 rounded-xl bg-black/25 px-2 py-1.5 text-[11px] border border-white/10">
+                              <div className="opacity-80 font-semibold">
+                                Reply to {m.reply_to_name || "User"}
+                              </div>
+                              <div className="opacity-70">
+                                {m.reply_to_content || "(pesan)"}
+                              </div>
+                            </div>
+                          )}
+
+                          {m.content && (
+                            <div className="whitespace-pre-wrap break-words">
+                              {m.content}
+                            </div>
+                          )}
+
+                          {m.attachment_url && (
+                            <div className="mt-2">
+                              {m.attachment_type === "image" ? (
+                                <img
+                                  src={m.attachment_url}
+                                  alt={m.attachment_name || "image"}
+                                  className="max-h-60 rounded-xl border border-white/10 object-contain"
+                                />
+                              ) : m.attachment_type === "pdf" ? (
+                                <a
+                                  href={m.attachment_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
+                                >
+                                  📄 {m.attachment_name || "file.pdf"}
+                                </a>
+                              ) : m.attachment_type === "audio" ? (
+                                <audio
+                                  controls
+                                  src={m.attachment_url}
+                                  className="w-full"
+                                />
+                              ) : (
+                                <a
+                                  href={m.attachment_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
+                                >
+                                  📎 {m.attachment_name || "file"}
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      <div className="mt-1 text-[10px] opacity-60">
+                        {new Date(m.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Existing reaction badges if any */}
+                    {!isDeletedForEveryone && reacts.length > 0 && (
+                      <div
+                        className={clsx(
+                          "mt-1 flex flex-wrap gap-1",
+                          isMine ? "justify-end" : "justify-start"
+                        )}
+                      >
+                        {reacts.map((r) => (
+                          <button
+                            key={r.emoji}
+                            type="button"
+                            onClick={() => {
+                              setInspectReaction({
+                                messageId: m.id,
+                                selectedEmoji: r.emoji,
+                              });
+                            }}
+                            className={clsx(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] border border-white/10 bg-white/5 hover:bg-white/15 transition-colors cursor-pointer",
+                              r.reactedByMe && "ring-1 ring-purple-400/60 bg-purple-500/15"
+                            )}
+                            title="Klik untuk melihat siapa yang bereaksi"
+                          >
+                            <span>{r.emoji}</span>
+                            <span className="font-semibold text-[10px]">
+                              {r.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Subtle Action Buttons Below Message (Emot icon, Reply, Delete) - WhatsApp style */}
+                {!isDeletedForEveryone && (
+                  <div
+                    className={clsx(
+                      "flex items-center gap-1.5 mt-0.5 px-9 opacity-50 hover:opacity-100 group-hover:opacity-100 transition-opacity",
+                      isMine ? "justify-end" : "justify-start"
+                    )}
+                  >
+                    {/* Small emote trigger button */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveReactMsgId((prev) =>
+                          prev === m.id ? null : m.id
+                        )
+                      }
+                      title="Beri reaksi emoji"
+                      className="flex items-center justify-center h-5 w-5 rounded-full text-white/70 hover:text-yellow-300 hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <SmilePlus className="h-3.5 w-3.5" />
+                    </button>
+
+                    {/* Small reply button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyTo(m);
+                        setOpen(true);
+                      }}
+                      title="Balas pesan"
+                      className="flex items-center justify-center h-5 w-5 rounded-full text-white/70 hover:text-cyan-300 hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <Reply className="h-3.5 w-3.5" />
+                    </button>
+
+                    {/* Delete button (opens confirmation dialog) */}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteMsg({ id: m.id, isMine })}
+                      title="Hapus pesan"
+                      className="flex items-center justify-center h-5 w-5 rounded-full text-white/70 hover:text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

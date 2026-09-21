@@ -71,28 +71,39 @@ export default function HomePage() {
         </main>
 
         {/* Footer */}
-        <footer className="mt-auto border-t border-white/5 py-5 text-center text-xs sm:text-sm text-slate-400 bg-slate-950/70 backdrop-blur-sm">
-          <p className="mb-1">
-            Built with{" "}
-            <span className="font-semibold text-sky-300">Next.js</span>,{" "}
-            <span className="font-semibold text-sky-300">TailwindCSS</span>,{" "}
-            <span className="font-semibold text-sky-300">Framer Motion</span>,
-            and powered by{" "}
-            <span className="font-semibold text-sky-300">Supabase</span> &{" "}
-            <span className="font-semibold text-sky-300">Vercel</span>.
-          </p>
-          <p>
-            Source code available on{" "}
-            <a
-              href="https://github.com/khoirulanam-dev/CTF-Polije"
-              target="_blank"
-              rel="noreferrer"
-              className="underline decoration-sky-400/70 hover:text-sky-200"
-            >
-              GitHub
-            </a>
-            . ©2025 POLIJE CTF. All rights reserved.
-          </p>
+        <footer className="mt-auto border-t border-white/10 py-6 text-center text-xs sm:text-sm text-slate-400 bg-slate-950/80 backdrop-blur-md">
+          <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 font-medium text-slate-300">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              <span>POLIJE CTF Platform</span>
+              <span className="text-slate-600 hidden sm:inline">•</span>
+              <span className="text-xs text-slate-400 hidden sm:inline">Competitive Cybersecurity</span>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs text-slate-400">
+              <Link href="/challenges" className="hover:text-sky-300 transition-colors">
+                Challenges
+              </Link>
+              <Link href="/scoreboard" className="hover:text-sky-300 transition-colors">
+                Scoreboard
+              </Link>
+              <Link href="/rules" className="hover:text-sky-300 transition-colors">
+                Rules
+              </Link>
+              <a
+                href="https://github.com/khoirulanam-dev/CTF-Polije"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-sky-300 transition-colors"
+              >
+                GitHub
+              </a>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              &copy; {new Date().getFullYear()} POLIJE CTF. All rights reserved.
+            </p>
+          </div>
         </footer>
       </div>
     </div>
