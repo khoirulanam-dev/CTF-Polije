@@ -174,45 +174,47 @@ export default function Navbar() {
         {/* RIGHT: auth, notif, theme */}
         <div className="flex items-center gap-3">
           {/* notif */}
-          <div className="relative hidden sm:block">
-            <button
-              className={`flex h-9 w-9 items-center justify-center rounded-full transition
-                ${
-                  pathname === "/notification"
-                    ? "bg-slate-900/80 ring-1 ring-blue-400/40"
-                    : "hover:bg-slate-900/40"
-                }`}
-              onClick={() => {
-                if (pathname === "/notification") {
-                  if (window.history.length > 1) router.back();
-                  else router.push("/");
-                } else {
-                  router.push("/notification");
-                }
-              }}
-              title="Notifications"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#60a5fa"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          {user && (
+            <div className="relative hidden sm:block">
+              <button
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition
+                  ${
+                    pathname === "/notification"
+                      ? "bg-slate-900/80 ring-1 ring-blue-400/40"
+                      : "hover:bg-slate-900/40"
+                  }`}
+                onClick={() => {
+                  if (pathname === "/notification") {
+                    if (window.history.length > 1) router.back();
+                    else router.push("/");
+                  } else {
+                    router.push("/notification");
+                  }
+                }}
+                title="Notifications"
               >
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            </button>
-            {unreadCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </div>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#60a5fa"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              </button>
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* theme switch */}
           <button

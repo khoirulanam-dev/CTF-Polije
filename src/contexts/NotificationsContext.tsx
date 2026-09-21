@@ -33,6 +33,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const notifId = (n: NotifShape) => `${n.notif_type}|${n.notif_challenge_id}|${n.notif_user_id || ''}|${n.notif_created_at}`
 
   async function refresh() {
+    if (!user) {
+      setUnreadCount(0)
+      return
+    }
+
     try {
       const notifs = await getNotifications(100, 0) as NotifShape[]
       const ids = notifs.map(notifId)
