@@ -36,7 +36,7 @@ export type ProfileUpdateResult = ProfileUpdateInput & {
   picture?: string | null
 }
 
-// ambil detail user via RPC `detail_user` (yang tadi sudah kita update di supabase)
+// ambil detail user via RPC `detail_user`
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
   try {
     const { data, error }: PostgrestSingleResponse<any> = await supabase.rpc(
@@ -49,7 +49,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       return null
     }
 
-    const u = data.user
+    const u = data.user || data
 
     return {
       id: u.id,
@@ -63,11 +63,10 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       linkedin_url: u.linkedin_url ?? null,
       instagram_url: u.instagram_url ?? null,
       website_url: u.website_url ?? null,
-      // ⬇️ ikutkan dari RPC
       highest_rank: u.highest_rank ?? null,
       highest_rank_at: u.highest_rank_at ?? null,
-      solved_challenges: (data.solved_challenges || []).map((c: any) => ({
-        id: c.challenge_id,
+      solved_challenges: (data.solved_challenges || data.solves || []).map((c: any) => ({
+        id: c.challenge_id || c.id,
         title: c.title,
         category: c.category,
         points: c.points,
@@ -83,12 +82,10 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
 }
 
 // ini dipakai halaman /user/[username]
-// kita sekalian ambil kolom peak-nya juga
 export async function getUserByUsername(username: string): Promise<User | null> {
   try {
     const { data, error } = await supabase
       .from('users')
-      // ambil field yg kita butuhkan aja, termasuk yg baru
       .select('id, username, avatar_url, bio, github_url, linkedin_url, instagram_url, website_url, is_admin, highest_rank, highest_rank_at, created_at, updated_at')
       .eq('username', username)
       .single()

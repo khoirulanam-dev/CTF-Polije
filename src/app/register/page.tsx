@@ -13,7 +13,6 @@ import GoogleLoginButton from "@/components/GoogleLoginButton";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 
-const EXPECTED_TOKEN = "Coba_Lagi"; // hanya untuk UX, tetap ada cek di server
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -60,9 +59,8 @@ export default function RegisterPage() {
       return;
     }
 
-    // 🔑 simple client-side check (biar user ga salah ketik)
-    if (formData.teamToken.trim() !== EXPECTED_TOKEN) {
-      setError("Invalid team token");
+    if (!formData.teamToken.trim()) {
+      setError("Team Token wajib diisi");
       setLoading(false);
       return;
     }

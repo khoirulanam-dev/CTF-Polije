@@ -1,38 +1,188 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChallengeWithSolve } from "@/types";
-import React from "react";
+import { getUnlockedHints, unlockHint } from "@/lib/challenges";
+import { useAuth } from "@/contexts/AuthContext";
+import { getUserDetail } from "@/lib/users";
+import React, { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 
 interface HintDialogProps {
   challenge: ChallengeWithSolve | null;
   hintIdx?: number;
   open: boolean;
   onClose: () => void;
+  onHintUnlocked?: (hintIdx: number) => void;
 }
 
-const HintDialog: React.FC<HintDialogProps> = ({ challenge, hintIdx = 0, open, onClose }) => {
+const HintDialog: React.FC<HintDialogProps> = ({
+  challenge,
+  hintIdx = 0,
+  open,
+  onClose,
+  onHintUnlocked,
+}) => {
+  const { user } = useAuth();
+  const [unlockedList, setUnlockedList] = useState<number[]>([]);
+  const [userScore, setUserScore] = useState<number | null>(null);
+  const [unlocking, setUnlocking] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const hints: string[] = Array.isArray(challenge?.hint) ? challenge!.hint : [];
+
+  // Hitung biaya per masing-masing hint secara terpisah:
+  // Hint 1 = base, Hint 2 = base * 1.5, Hint 3 = base * 2
+  const challengePoints = challenge?.points || 100;
+  const baseCost = Math.max(10, Math.min(50, Math.round(challengePoints * 0.1)));
+  const hintCost = Math.round(baseCost * (1 + hintIdx * 0.5));
+
+  useEffect(() => {
+    if (!open || !challenge) return;
+    setLoading(true);
+
+    Promise.all([
+      getUnlockedHints(challenge.id),
+      user?.id ? getUserDetail(user.id) : Promise.resolve(null),
+    ])
+      .then(([list, detail]) => {
+        setUnlockedList(list);
+        if (detail) {
+          setUserScore(detail.score ?? 0);
+        }
+      })
+      .catch((err) => {
+        console.error("Error loading hint / user data:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [open, challenge, hintIdx, user?.id]);
+
   if (!challenge) return null;
-  const hints: string[] = Array.isArray(challenge.hint) ? challenge.hint : [];
+
+  const isUnlocked = unlockedList.includes(hintIdx);
+  const hasInsufficientPoints = userScore !== null && hintCost > 0 && userScore < hintCost;
+
+  const handleUnlock = async () => {
+    if (hasInsufficientPoints) {
+      toast.error(`Poin Anda tidak mencukupi! Anda memiliki ${userScore} pts, dibutuhkan ${hintCost} pts.`);
+      return;
+    }
+
+    setUnlocking(true);
+    try {
+      const res = await unlockHint(challenge.id, hintIdx, hintCost);
+      if (res.success) {
+        toast.success(res.message || `Hint #${hintIdx + 1} berhasil dibuka (-${hintCost} pts)`);
+        setUnlockedList((prev) => Array.from(new Set([...prev, hintIdx])));
+        if (userScore !== null) {
+          setUserScore(Math.max(0, userScore - hintCost));
+        }
+        onHintUnlocked?.(hintIdx);
+      } else {
+        toast.error(res.message || "Gagal membuka hint");
+      }
+    } catch {
+      toast.error("Terjadi kesalahan saat membuka hint");
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={open => { if (!open) onClose(); }}>
       <DialogContent
-        className="bg-[#232344] dark:bg-gray-900 rounded-md shadow-2xl max-w-xl min-w-[320px] w-full border border-[#35355e] dark:border-gray-700 p-6 font-mono [&_button.absolute.right-4.top-4]:block md:[&_button.absolute.right-4.top-4]:hidden [&_button.absolute.right-4.top-4]:text-white
-"
+        className="bg-[#232344] dark:bg-gray-900 rounded-md shadow-2xl max-w-lg min-w-[320px] w-full border border-[#35355e] dark:border-gray-700 p-6 font-mono [&_button.absolute.right-4.top-4]:block md:[&_button.absolute.right-4.top-4]:hidden [&_button.absolute.right-4.top-4]:text-white"
         style={{ boxShadow: '0 8px 32px #0008', border: '1.5px solid #35355e' }}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-pink-300 dark:text-pink-200">
-            <span className="w-8 h-8 bg-blue-200 dark:bg-blue-900 rounded-full flex items-center justify-center">💡</span>
-            Hint for: {challenge.title}
+          <DialogTitle className="flex items-center gap-2 text-pink-300 dark:text-pink-200 text-lg">
+            <span className="w-8 h-8 bg-blue-200 dark:bg-blue-900 rounded-full flex items-center justify-center">
+              {isUnlocked ? "💡" : "🔒"}
+            </span>
+            Hint {hints.length > 1 ? `#${hintIdx + 1}` : ""}: {challenge.title}
           </DialogTitle>
         </DialogHeader>
+
         <div className="mt-4">
-          <div className="bg-[#35355e] dark:bg-gray-800 border border-[#35355e] dark:border-gray-700 rounded-lg p-4">
-            {hints[hintIdx] ? (
-              <div className="text-gray-200 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">{hints[hintIdx]}</div>
-            ) : (
-              <p className="text-gray-400 dark:text-gray-400 italic">No hint available.</p>
-            )}
-          </div>
+          {loading ? (
+            <div className="text-center py-6 text-gray-400 text-sm">
+              Memeriksa status hint #{hintIdx + 1}...
+            </div>
+          ) : isUnlocked ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-green-400 bg-green-950/40 border border-green-800/60 px-3 py-1.5 rounded">
+                <span>✓ Hint #{hintIdx + 1} Terbuka</span>
+                <span className="text-gray-400">Poin terpotong: -{hintCost} pts</span>
+              </div>
+              <div className="bg-[#35355e] dark:bg-gray-800 border border-[#35355e] dark:border-gray-700 rounded-lg p-4">
+                {hints[hintIdx] ? (
+                  <div className="text-gray-200 dark:text-gray-100 leading-relaxed whitespace-pre-wrap text-sm">
+                    {hints[hintIdx]}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 italic text-sm">Tidak ada petunjuk tersedia.</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 text-center py-2">
+              <div className="mx-auto w-12 h-12 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-2xl text-yellow-400">
+                🔒
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-white">
+                  Hint #{hintIdx + 1} Masih Terkunci
+                </h4>
+                <p className="text-xs text-gray-300 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                  Setiap hint memiliki biaya poin terpisah. Membuka{" "}
+                  <span className="text-yellow-400 font-bold">Hint #{hintIdx + 1}</span> akan mengurangi skor Anda sebesar{" "}
+                  <span className="text-yellow-400 font-bold">{hintCost} poin</span> pada leaderboard.
+                </p>
+              </div>
+
+              {/* Status Poin User */}
+              <div className="flex items-center justify-between text-xs px-3 py-2 rounded bg-[#181829] border border-[#35355e] max-w-sm mx-auto">
+                <span className="text-gray-300">Poin Anda Saat Ini:</span>
+                <span className={`font-bold ${hasInsufficientPoints ? 'text-red-400' : 'text-cyan-400'}`}>
+                  {userScore !== null ? `${userScore} pts` : 'Memuat...'}
+                </span>
+              </div>
+
+              {hasInsufficientPoints && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-300 text-xs text-left max-w-sm mx-auto flex items-start gap-2">
+                  <span className="text-base leading-none">⚠️</span>
+                  <div>
+                    <p className="font-semibold text-red-200">Poin Tidak Mencukupi!</p>
+                    <p className="mt-0.5 text-gray-300 text-[11px] leading-relaxed">
+                      Anda membutuhkan minimal <strong className="text-yellow-400">{hintCost} poin</strong> untuk membuka hint ini. Selesaikan tantangan lain terlebih dahulu untuk menambah poin.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 transition font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnlock}
+                  disabled={unlocking || hasInsufficientPoints}
+                  className="px-5 py-2 text-xs rounded bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-950 font-bold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {unlocking
+                    ? "Membuka..."
+                    : hasInsufficientPoints
+                    ? "Poin Tidak Cukup"
+                    : `Buka Hint #${hintIdx + 1} (-${hintCost} Pts)`}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

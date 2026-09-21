@@ -530,3 +530,68 @@ export async function getNotifications(limit = 100, offset = 0) {
   // console.log(data)
   return data || [];
 }
+
+/**
+ * Unlock hint with point penalty
+ */
+export async function unlockHint(challengeId: string, hintIdx: number, cost = 0) {
+  try {
+    const { data, error } = await supabase.rpc('unlock_hint', {
+      p_challenge_id: challengeId,
+      p_hint_idx: hintIdx,
+      p_cost: cost,
+    });
+    if (error) throw error;
+
+    // Simpan di localStorage hanya jika SUKSES dari database
+    if (data && data.success) {
+      if (typeof window !== 'undefined') {
+        const storageKey = `unlocked_hints_${challengeId}`;
+        const saved = localStorage.getItem(storageKey);
+        const list: number[] = saved ? JSON.parse(saved) : [];
+        if (!list.includes(hintIdx)) {
+          localStorage.setItem(storageKey, JSON.stringify([...list, hintIdx]));
+        }
+      }
+    }
+
+    return data;
+  } catch (err: any) {
+    console.error('unlockHint error:', err);
+    return {
+      success: false,
+      message: err?.message || 'Terjadi kesalahan sistem saat membuka hint.',
+    };
+  }
+}
+
+/**
+ * Get all unlocked hints for current user on a challenge
+ */
+export async function getUnlockedHints(challengeId: string): Promise<number[]> {
+  const storageKey = `unlocked_hints_${challengeId}`;
+  let localList: number[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      localList = saved ? JSON.parse(saved) : [];
+    } catch {}
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('get_unlocked_hints', {
+      p_challenge_id: challengeId,
+    });
+    if (error) return localList;
+    const remoteList: number[] = (data || []).map((h: any) => h.hint_idx);
+    
+    // Sinkronkan cache localStorage dengan data riil dari Supabase
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, JSON.stringify(remoteList));
+    }
+    return remoteList;
+  } catch {
+    return localList;
+  }
+}
+

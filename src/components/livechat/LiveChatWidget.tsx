@@ -46,7 +46,8 @@ type MentionUser = {
 };
 
 const CHAT_ROOM = "global";
-const COOLDOWN_MS = 1500;
+const COOLDOWN_SECONDS = 3;
+const COOLDOWN_MS = COOLDOWN_SECONDS * 1000;
 const MAX_LEN = 500;
 
 // emoji list sederhana (no lib)
@@ -58,6 +59,7 @@ export default function LiveChatWidget() {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
+  const [cooldownLeft, setCooldownLeft] = useState<number>(0);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -395,6 +397,23 @@ export default function LiveChatWidget() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, open]);
 
+  // ---------- cooldown countdown timer ----------
+  useEffect(() => {
+    if (cooldownLeft <= 0) return;
+    const timer = setInterval(() => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((COOLDOWN_MS - (Date.now() - lastSendAtRef.current)) / 1000)
+      );
+      setCooldownLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+      }
+    }, 150);
+
+    return () => clearInterval(timer);
+  }, [cooldownLeft]);
+
   // ---------- reactions fetch/aggregate ----------
   useEffect(() => {
     if (!msgs.length) return;
@@ -509,8 +528,10 @@ export default function LiveChatWidget() {
     if (!userId) return;
 
     const now = Date.now();
-    if (now - lastSendAtRef.current < COOLDOWN_MS) {
-      showNotice("⏳ Pelan-pelan ya, jangan spam 🙏");
+    const elapsed = now - lastSendAtRef.current;
+    if (elapsed < COOLDOWN_MS) {
+      const waitSec = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+      showNotice(`⏳ Tunggu ${waitSec}s sebelum mengirim lagi.`);
       return;
     }
 
@@ -525,6 +546,7 @@ export default function LiveChatWidget() {
 
     lastSendAtRef.current = now;
     lastMsgRef.current = cleaned;
+    setCooldownLeft(COOLDOWN_SECONDS);
 
     try {
       await sendMessage(
@@ -953,14 +975,25 @@ export default function LiveChatWidget() {
               placeholder="Tulis pesan..."
               value={text}
               onChange={(e) => onTypeChange(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onSend()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (cooldownLeft <= 0) onSend();
+                }
+              }}
             />
 
             <button
               onClick={() => onSend()}
-              className="shrink-0 whitespace-nowrap rounded-xl bg-purple-600 px-3 sm:px-4 py-2 text-white hover:bg-purple-700"
+              disabled={cooldownLeft > 0}
+              className={clsx(
+                "shrink-0 whitespace-nowrap rounded-xl px-3 sm:px-4 py-2 font-medium transition-all text-sm flex items-center justify-center min-w-[64px]",
+                cooldownLeft > 0
+                  ? "bg-zinc-700/80 text-zinc-400 cursor-not-allowed border border-zinc-600/40"
+                  : "bg-purple-600 hover:bg-purple-700 text-white active:scale-95"
+              )}
             >
-              Kirim
+              {cooldownLeft > 0 ? `${cooldownLeft}s` : "Kirim"}
             </button>
 
             <input

@@ -1,8 +1,13 @@
 'use client'
 
-import ScoreboardChart from '@/components/scoreboard/ScoreboardChart'
+import dynamic from 'next/dynamic'
 import ScoreboardTable from '@/components/scoreboard/ScoreboardTable'
 import ScoreboardEmptyState from '@/components/scoreboard/ScoreboardEmptyState'
+
+const ScoreboardChart = dynamic(() => import('@/components/scoreboard/ScoreboardChart'), {
+  ssr: false,
+  loading: () => <div className="h-80 w-full animate-pulse bg-slate-800/40 rounded-xl" />,
+});
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'

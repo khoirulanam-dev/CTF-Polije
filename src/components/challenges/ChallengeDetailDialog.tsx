@@ -7,6 +7,7 @@ import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import SolversList, { Solver } from './SolversList';
 import HintDialog from './HintDialog';
 import { Attachment, ChallengeWithSolve } from '@/types';
+import { getUnlockedHints } from '@/lib/challenges';
 
 interface ChallengeDetailDialogProps {
   open: boolean;
@@ -44,6 +45,14 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
   setShowHintModal,
 }) => {
   const [copiedAll, setCopiedAll] = useState<{ [key: string]: boolean }>({});
+  const [unlockedHints, setUnlockedHints] = useState<number[]>([]);
+
+  React.useEffect(() => {
+    if (open && challenge?.id) {
+      getUnlockedHints(challenge.id).then(setUnlockedHints);
+    }
+  }, [open, challenge?.id]);
+
   if (!challenge) return null;
 
   return (
@@ -207,19 +216,31 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
             {/* Hint buttons */}
             {Array.isArray(challenge.hint) && challenge.hint.length > 0 && (
               <div className="mb-1 flex flex-wrap gap-2">
-                {(challenge.hint ?? []).map((hint: string, idx: number) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="px-3 py-1 rounded bg-yellow-200 text-yellow-900 font-semibold text-xs hover:bg-yellow-300 transition"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setShowHintModal({ challenge, hintIdx: idx });
-                    }}
-                  >
-                    💡 Hint {(challenge.hint?.length ?? 0) > 1 ? idx + 1 : ''}
-                  </button>
-                ))}
+                {(challenge.hint ?? []).map((hint: string, idx: number) => {
+                  const isUnlocked = unlockedHints.includes(idx);
+                  const baseCost = Math.max(10, Math.min(50, Math.round((challenge.points || 100) * 0.1)));
+                  const cost = Math.round(baseCost * (1 + idx * 0.5));
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`px-3 py-1.5 rounded font-semibold text-xs transition flex items-center gap-1.5 shadow-sm border ${
+                        isUnlocked
+                          ? "bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30"
+                          : "bg-yellow-500/20 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/30"
+                      }`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setShowHintModal({ challenge, hintIdx: idx });
+                      }}
+                    >
+                      <span>{isUnlocked ? "✓" : "🔒"} Hint {(challenge.hint?.length ?? 0) > 1 ? `#${idx + 1}` : ''}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${isUnlocked ? "bg-green-400/20 text-green-200" : "bg-yellow-400/20 text-yellow-200"}`}>
+                        {isUnlocked ? "Terbuka" : `-${cost} pts`}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
             {/* Flag input */}
@@ -273,6 +294,9 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
         hintIdx={showHintModal.hintIdx}
         open={!!showHintModal.challenge}
         onClose={() => setShowHintModal({ challenge: null })}
+        onHintUnlocked={(unlockedIdx) => {
+          setUnlockedHints(prev => Array.from(new Set([...prev, unlockedIdx])));
+        }}
       />
     </Dialog>
   );
