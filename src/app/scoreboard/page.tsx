@@ -150,29 +150,52 @@ export default function ScoreboardPage() {
   if (eventEnabled) periodOptions.push({ value: 'event', label: 'Event' })
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b101b]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
         <TitlePage>🏆 Scoreboard</TitlePage>
-        <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900/60 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
-            {periodOptions.map((item) => (
-              <Button
-                key={item.value}
-                size="sm"
-                variant={period === item.value ? 'default' : 'outline'}
-                onClick={() => setPeriod(item.value)}
-              >
-                {item.label}
-              </Button>
-            ))}
+            {periodOptions.map((item) => {
+              const active = period === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setPeriod(item.value)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-xs ${
+                    active
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant={mode === 'users' ? 'default' : 'outline'} onClick={() => setMode('users')}>
+            <button
+              type="button"
+              onClick={() => setMode('users')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-xs ${
+                mode === 'users'
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+              }`}
+            >
               Users
-            </Button>
-            <Button size="sm" variant={mode === 'teams' ? 'default' : 'outline'} onClick={() => setMode('teams')}>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('teams')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-xs ${
+                mode === 'teams'
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+              }`}
+            >
               Teams
-            </Button>
+            </button>
           </div>
         </div>
         {loading ? (
@@ -200,15 +223,15 @@ export default function ScoreboardPage() {
               {mode === 'users' ? (
                 <ScoreboardTable leaderboard={leaderboard} currentUsername={user?.username} />
               ) : (
-                <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
                   <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Team Ranking</h2>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Team Ranking</h2>
                     <Button size="sm" variant="outline" onClick={() => router.push('/teams')}>My Team</Button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left text-gray-600 dark:border-gray-700 dark:text-gray-300">
+                        <tr className="border-b text-left border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold">
                           <th className="w-16 py-2 text-center">Rank</th>
                           <th className="py-2">Team</th>
                           <th className="py-2 text-center">Members</th>
@@ -217,13 +240,13 @@ export default function ScoreboardPage() {
                       </thead>
                       <tbody>
                         {teamLeaderboard.map((entry) => (
-                          <tr key={entry.team_id} className="border-b last:border-0 dark:border-gray-700">
-                            <td className="py-3 text-center font-mono text-gray-600 dark:text-gray-300">#{entry.rank}</td>
-                            <td className="py-3 font-medium text-gray-900 dark:text-white">
+                          <tr key={entry.team_id} className="border-b last:border-0 border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="py-3 text-center font-mono text-slate-600 dark:text-slate-300">#{entry.rank}</td>
+                            <td className="py-3 font-medium text-slate-900 dark:text-white">
                               {entry.team_name}
                             </td>
-                            <td className="py-3 text-center text-gray-600 dark:text-gray-300">{entry.member_count}</td>
-                            <td className="py-3 text-center font-semibold text-gray-900 dark:text-white">{entry.score}</td>
+                            <td className="py-3 text-center text-slate-600 dark:text-slate-300">{entry.member_count}</td>
+                            <td className="py-3 text-center font-semibold text-blue-600 dark:text-cyan-400">{entry.score}</td>
                           </tr>
                         ))}
                         {teamLeaderboard.length === 0 && (

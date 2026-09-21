@@ -39,9 +39,9 @@ const ScoreboardChart: React.FC<ScoreboardChartProps> = ({ leaderboard, isDark }
   })
 
   return (
-    <Card className="bg-white dark:bg-gray-800">
+    <Card className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-center text-gray-900 dark:text-white">Top 10 Users</CardTitle>
+        <CardTitle className="text-lg font-bold text-center text-slate-900 dark:text-white">Top 10 Users</CardTitle>
       </CardHeader>
       <CardContent>
         <Plot
@@ -52,35 +52,35 @@ const ScoreboardChart: React.FC<ScoreboardChartProps> = ({ leaderboard, isDark }
             xaxis: {
               type: 'date',
               autorange: true,
-              tickfont: { size: 10, color: isDark ? '#e5e7eb' : '#111' },
+              tickfont: { size: 10, color: isDark ? '#94a3b8' : '#64748b' },
               tickformat: '%Y-%m-%d %H:%M',
-              gridcolor: isDark ? '#374151' : '#e5e7eb',
-              linecolor: isDark ? '#e5e7eb' : '#111',
+              gridcolor: isDark ? '#1e293b' : '#f1f5f9',
+              linecolor: isDark ? '#334155' : '#cbd5e1',
             },
             yaxis: {
               autorange: true,
               rangemode: 'tozero',
               automargin: true,
-              title: { text: 'Score', font: { size: 12, color: isDark ? '#e5e7eb' : '#111' } },
-              tickfont: { size: 10, color: isDark ? '#e5e7eb' : '#111' },
-              gridcolor: isDark ? '#374151' : '#e5e7eb',
-              linecolor: isDark ? '#e5e7eb' : '#111',
+              title: { text: 'Score', font: { size: 12, color: isDark ? '#94a3b8' : '#64748b' } },
+              tickfont: { size: 10, color: isDark ? '#94a3b8' : '#64748b' },
+              gridcolor: isDark ? '#1e293b' : '#f1f5f9',
+              linecolor: isDark ? '#334155' : '#cbd5e1',
             },
             legend: {
               orientation: 'h',
               x: 0.5,
               xanchor: 'center',
               y: -0.2,
-              font: { size: 10, color: isDark ? '#e5e7eb' : '#111' },
+              font: { size: 10, color: isDark ? '#cbd5e1' : '#475569' },
             },
             margin: { t: 20, r: 10, l: 30, b: 40 },
-            plot_bgcolor: isDark ? '#1f2937' : '#fff',
-            paper_bgcolor: isDark ? '#1f2937' : '#fff',
+            plot_bgcolor: isDark ? '#0f172a' : '#fff',
+            paper_bgcolor: isDark ? '#0f172a' : '#fff',
           }}
           style={{ width: '100%', height: '320px' }}
           useResizeHandler
           config={{ scrollZoom: false, displayModeBar: false }}
-          className="dark:!bg-gray-900 dark:!text-gray-100"
+          className="dark:!bg-slate-900 dark:!text-slate-100"
         />
       </CardContent>
     </Card>

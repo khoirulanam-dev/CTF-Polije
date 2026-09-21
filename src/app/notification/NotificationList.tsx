@@ -63,12 +63,12 @@ export default function NotificationList() {
             key={notif.id || idx}
             className={`border rounded-2xl p-4 shadow-sm transition-all duration-200 ${
               isFeature
-                ? "bg-cyan-950/20 border-cyan-500/30 hover:border-cyan-500/50 hover:bg-cyan-950/30"
+                ? "bg-cyan-50/70 border-cyan-200 hover:bg-cyan-50 hover:border-cyan-300 dark:bg-cyan-950/20 dark:border-cyan-500/30 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-950/30"
                 : isNewChall
-                ? "bg-slate-900/60 border-slate-800 hover:border-amber-500/40 hover:bg-slate-900/80"
+                ? "bg-amber-50/70 border-amber-200 hover:bg-amber-50 hover:border-amber-300 dark:bg-slate-900/60 dark:border-slate-800 dark:hover:border-amber-500/40 dark:hover:bg-slate-900/80"
                 : isFirstBlood
-                ? "bg-slate-900/60 border-slate-800 hover:border-red-500/40 hover:bg-slate-900/80"
-                : "bg-purple-950/20 border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-950/30"
+                ? "bg-rose-50/70 border-rose-200 hover:bg-rose-50 hover:border-rose-300 dark:bg-slate-900/60 dark:border-slate-800 dark:hover:border-red-500/40 dark:hover:bg-slate-900/80"
+                : "bg-purple-50/70 border-purple-200 hover:bg-purple-50 hover:border-purple-300 dark:bg-purple-950/20 dark:border-purple-500/30 dark:hover:border-purple-500/50 dark:hover:bg-purple-950/30"
             }`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -79,12 +79,12 @@ export default function NotificationList() {
               <span
                 className={`flex items-center justify-center shrink-0 w-10 h-10 rounded-xl text-lg ${
                   isFeature
-                    ? "bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                    ? "bg-cyan-100/80 border border-cyan-300 text-cyan-600 dark:bg-cyan-500/10 dark:border-cyan-500/30 dark:text-cyan-400 dark:shadow-[0_0_10px_rgba(6,182,212,0.2)]"
                     : isNewChall
-                    ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                    ? "bg-amber-100/80 border border-amber-300 text-amber-600 dark:bg-amber-500/10 dark:border-amber-500/30 dark:text-amber-400"
                     : isFirstBlood
-                    ? "bg-red-500/10 border border-red-500/30 text-red-400"
-                    : "bg-purple-500/10 border border-purple-500/30 text-purple-400"
+                    ? "bg-rose-100/80 border border-rose-300 text-rose-600 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-400"
+                    : "bg-purple-100/80 border border-purple-300 text-purple-600 dark:bg-purple-500/10 dark:border-purple-500/30 dark:text-purple-400"
                 }`}
               >
                 {isFeature ? "✨" : isNewChall ? "🚩" : isFirstBlood ? "🩸" : "🚀"}
@@ -96,36 +96,36 @@ export default function NotificationList() {
                   <span
                     className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border tracking-wide ${
                       isFeature
-                        ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                        ? "bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40"
                         : isNewChall
-                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40"
                         : isFirstBlood
-                        ? "bg-red-500/20 text-red-300 border-red-500/40"
-                        : "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                        ? "bg-rose-100 text-rose-800 border-rose-300 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/40"
+                        : "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/40"
                     }`}
                   >
                     {notif.badge || (isFeature ? "FITUR BARU" : isNewChall ? "SOAL BARU" : "FIRST BLOOD")}
                   </span>
 
                   {notif.category && (
-                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60">
+                    <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
                       [{notif.category}]
                     </span>
                   )}
 
-                  <span className="text-xs text-gray-400 dark:text-slate-500 ml-auto whitespace-nowrap">
+                  <span className="text-xs text-gray-500 dark:text-slate-400 ml-auto whitespace-nowrap">
                     {notif.created_at ? formatRelativeDate(notif.created_at) : ""}
                   </span>
                 </div>
 
                 {/* Title */}
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide mt-1">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide mt-1">
                   {notif.title}
                 </h3>
 
                 {/* Description or details */}
                 {notif.description && (
-                  <p className="text-xs text-gray-600 dark:text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                     {notif.description}
                   </p>
                 )}
@@ -135,7 +135,7 @@ export default function NotificationList() {
                   <div className="mt-2.5">
                     <Link
                       href={notif.link}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-500 dark:text-cyan-400 dark:hover:text-cyan-300 transition-colors"
                     >
                       <span>Buka Halaman</span>
                       <span>→</span>

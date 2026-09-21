@@ -173,6 +173,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth
 AS $$
+#variable_conflict use_column
 DECLARE
   v_challenge_id uuid := challenge_id;
   v_flag_input text := flag;
@@ -195,10 +196,10 @@ BEGIN
   END IF;
 
   -- 🛡️ RATE LIMITING 1: 3-Second Cooldown between submissions across challenges
-  SELECT created_at INTO v_last_submit_time
-  FROM public.flag_submissions
-  WHERE user_id = v_user_id
-  ORDER BY created_at DESC
+  SELECT fs.created_at INTO v_last_submit_time
+  FROM public.flag_submissions AS fs
+  WHERE fs.user_id = v_user_id
+  ORDER BY fs.created_at DESC
   LIMIT 1;
 
   IF v_last_submit_time IS NOT NULL AND (now() - v_last_submit_time) < interval '3 seconds' THEN
@@ -210,11 +211,11 @@ BEGIN
 
   -- 🛡️ RATE LIMITING 2: Anti-Brute-Force (Max 5 failed attempts per challenge in 1 minute)
   SELECT count(*) INTO v_failed_count
-  FROM public.flag_submissions
-  WHERE user_id = v_user_id
-    AND challenge_id = v_challenge_id
-    AND is_correct = false
-    AND created_at > (now() - interval '1 minute');
+  FROM public.flag_submissions AS fs
+  WHERE fs.user_id = v_user_id
+    AND fs.challenge_id = v_challenge_id
+    AND fs.is_correct = false
+    AND fs.created_at > (now() - interval '1 minute');
 
   IF v_failed_count >= 5 THEN
     RETURN json_build_object(
@@ -261,7 +262,7 @@ BEGIN
   -- Check if already solved
   SELECT EXISTS (
     SELECT 1
-    FROM public.solves s
+    FROM public.solves AS s
     WHERE s.user_id = v_user_id
       AND s.challenge_id = v_challenge_id
   ) INTO v_already;
@@ -276,7 +277,7 @@ BEGIN
 
   SELECT COALESCE(c.total_solves, 0)
   INTO v_total_solves
-  FROM public.challenges c
+  FROM public.challenges AS c
   WHERE c.id = v_challenge_id;
 
   IF COALESCE(v_is_dynamic, false) THEN
@@ -293,9 +294,9 @@ BEGIN
       );
     END IF;
 
-    UPDATE public.challenges
+    UPDATE public.challenges AS c
     SET points = v_new_points
-    WHERE id = v_challenge_id;
+    WHERE c.id = v_challenge_id;
 
     v_points := v_new_points;
   END IF;

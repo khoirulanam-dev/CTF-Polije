@@ -59,10 +59,10 @@ export default function TopAlertBanner() {
 
   const badgeColor =
     activeAlert.notif_type === "feature_update"
-      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.3)]"
+      ? "bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/40"
       : activeAlert.notif_type === "new_challenge"
-      ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
-      : "bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
+      ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40"
+      : "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/40";
 
   const progressColor =
     activeAlert.notif_type === "feature_update"
@@ -81,11 +81,11 @@ export default function TopAlertBanner() {
         transition={{ duration: 0.35, ease: "easeOut" }}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
-        className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-lg w-[94%] sm:w-full overflow-hidden rounded-2xl bg-slate-950/95 border border-cyan-500/40 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+        className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-lg w-[94%] sm:w-full overflow-hidden rounded-2xl bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-cyan-500/40 backdrop-blur-xl shadow-xl dark:shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
       >
         <div className="p-3.5 sm:p-4 flex items-start gap-3">
           {/* Pulsing Icon */}
-          <div className="shrink-0 mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-lg shadow-[0_0_12px_rgba(6,182,212,0.2)]">
+          <div className="shrink-0 mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-cyan-500/10 border border-blue-200 dark:border-cyan-500/30 text-lg shadow-xs">
             {activeAlert.notif_type === "feature_update"
               ? "✨"
               : activeAlert.notif_type === "new_challenge"
@@ -101,17 +101,17 @@ export default function TopAlertBanner() {
               >
                 {badgeText}
               </span>
-              <span className="text-[11px] text-slate-400 font-mono">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                 {Math.ceil((progress / 100) * 5)}s
               </span>
             </div>
 
-            <h4 className="text-sm font-bold text-white tracking-wide truncate drop-shadow-sm">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide truncate drop-shadow-sm">
               {activeAlert.title}
             </h4>
 
             {activeAlert.description && (
-              <p className="text-xs text-slate-300 mt-0.5 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2 leading-relaxed">
                 {activeAlert.description}
               </p>
             )}
@@ -121,7 +121,7 @@ export default function TopAlertBanner() {
               <Link
                 href={activeAlert.link || "/notification"}
                 onClick={() => dismissAlert()}
-                className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2 flex items-center gap-1 transition-colors"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-500 dark:text-cyan-400 dark:hover:text-cyan-300 underline underline-offset-2 flex items-center gap-1 transition-colors"
               >
                 <span>Lihat Detail</span>
                 <span>→</span>
@@ -129,7 +129,7 @@ export default function TopAlertBanner() {
               <Link
                 href="/notification"
                 onClick={() => dismissAlert()}
-                className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
               >
                 Buka Notifikasi
               </Link>
@@ -140,7 +140,7 @@ export default function TopAlertBanner() {
           <button
             onClick={() => dismissAlert()}
             aria-label="Tutup Alert"
-            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors"
+            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-slate-800/60 transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -159,7 +159,7 @@ export default function TopAlertBanner() {
         </div>
 
         {/* 5-Second Countdown Progress Bar */}
-        <div className="w-full bg-slate-900/80 h-1 relative overflow-hidden">
+        <div className="w-full bg-slate-100 dark:bg-slate-900/80 h-1 relative overflow-hidden">
           <div
             className={`h-full bg-gradient-to-r ${progressColor} shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-[width] duration-75 ease-linear`}
             style={{ width: `${progress}%` }}

@@ -46,20 +46,20 @@ export default function ChallengeFilterBar({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="w-full bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3 mb-0"
+      transition={{ duration: 0.4 }}
+      className="w-full bg-white dark:bg-slate-900/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800/80 p-3.5 sm:p-4 mb-0"
     >
       <form className="w-full flex flex-wrap gap-3 items-center">
         <label htmlFor="search" className="sr-only">Search challenges</label>
         <div className="flex-1 min-w-[180px]">
           <input
-          id="search"
-          type="text"
-          value={filters.search}
-          onChange={e => onFilterChange({ ...filters, search: e.target.value })}
-          placeholder="Search challenge..."
-          className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition"
-        />
+            id="search"
+            type="text"
+            value={filters.search}
+            onChange={e => onFilterChange({ ...filters, search: e.target.value })}
+            placeholder="🔍 Cari challenge..."
+            className="w-full px-3.5 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 bg-slate-50 dark:bg-slate-900/80 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 transition"
+          />
         </div>
 
         {showStatusFilter && (
@@ -69,7 +69,7 @@ export default function ChallengeFilterBar({
               id="status"
               value={filters.status || 'all'}
               onChange={e => onFilterChange({ ...filters, status: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900"
+              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/80 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 cursor-pointer transition"
             >
               <option value="all">All Status</option>
               <option value="unsolved">Unsolved</option>
@@ -84,7 +84,7 @@ export default function ChallengeFilterBar({
             id="category"
             value={filters.category}
             onChange={e => onFilterChange({ ...filters, category: e.target.value })}
-            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900"
+            className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/80 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 cursor-pointer transition"
           >
             <option value="all">All Categories</option>
             {sortedCategories.map(category => (
@@ -99,7 +99,7 @@ export default function ChallengeFilterBar({
             id="difficulty"
             value={filters.difficulty}
             onChange={e => onFilterChange({ ...filters, difficulty: e.target.value })}
-            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900"
+            className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/80 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 cursor-pointer transition"
           >
             <option value="all">All Difficulties</option>
             {sortedDifficulties.map(difficulty => (
@@ -108,11 +108,11 @@ export default function ChallengeFilterBar({
           </select>
         </div>
 
-        <div className="flex-none min-w-[100px]">
+        <div className="flex-none min-w-[90px]">
           <button
             type="button"
             onClick={onClear}
-            className="w-full px-3 py-2 text-sm text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900 rounded hover:bg-blue-100 dark:hover:bg-blue-800 transition"
+            className="w-full px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700/60 rounded-xl transition shadow-xs"
             aria-label="Clear filters"
           >
             Clear

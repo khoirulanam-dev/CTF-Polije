@@ -25,11 +25,11 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
   const pathname = usePathname();
 
   return (
-    <Card className="bg-slate-900/60 dark:bg-slate-900/80 border border-slate-800 backdrop-blur-md shadow-xl">
+    <Card className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <div className="flex items-center gap-2">
           <span className="text-xl">🏆</span>
-          <CardTitle className="text-lg font-bold tracking-wide text-white">
+          <CardTitle className="text-lg font-bold tracking-wide text-slate-900 dark:text-white">
             Leaderboard Ranking
           </CardTitle>
         </div>
@@ -44,14 +44,14 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
       <CardContent className="px-2 sm:px-6">
         <Table>
           <TableHeader>
-            <TableRow className="border-slate-800 hover:bg-transparent">
-              <TableHead className="w-16 text-center text-slate-400 font-semibold text-xs uppercase tracking-wider">
+            <TableRow className="border-b border-slate-200 dark:border-slate-800 hover:bg-transparent">
+              <TableHead className="w-16 text-center text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">
                 Rank
               </TableHead>
-              <TableHead className="text-slate-400 font-semibold text-xs uppercase tracking-wider">
+              <TableHead className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">
                 User
               </TableHead>
-              <TableHead className="text-right sm:text-center text-slate-400 font-semibold text-xs uppercase tracking-wider pr-4">
+              <TableHead className="text-right sm:text-center text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider pr-4">
                 Score
               </TableHead>
             </TableRow>
@@ -65,10 +65,10 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
                 <TableRow
                   key={entry.username}
                   className={`
-                    transition-all border-slate-800/60 hover:bg-slate-800/40
+                    transition-all border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/40
                     ${
                       isCurrentUser
-                        ? "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/15"
+                        ? "bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30"
                         : ""
                     }
                   `}
@@ -76,19 +76,19 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
                   {/* Rank Column with Badges */}
                   <TableCell className="text-center py-3">
                     {rankNum === 1 ? (
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 font-bold font-mono text-sm shadow-[0_0_8px_rgba(234,179,8,0.4)]">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-500/20 dark:text-yellow-300 dark:border-yellow-500/50 font-bold font-mono text-sm shadow-xs">
                         1
                       </span>
                     ) : rankNum === 2 ? (
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300/20 text-slate-200 border border-slate-300/50 font-bold font-mono text-sm shadow-[0_0_6px_rgba(203,213,225,0.3)]">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-300/20 dark:text-slate-200 dark:border-slate-300/50 font-bold font-mono text-sm shadow-xs">
                         2
                       </span>
                     ) : rankNum === 3 ? (
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-600/20 text-amber-300 border border-amber-600/50 font-bold font-mono text-sm shadow-[0_0_6px_rgba(217,119,6,0.3)]">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-600/20 dark:text-amber-300 dark:border-amber-600/50 font-bold font-mono text-sm shadow-xs">
                         3
                       </span>
                     ) : (
-                      <span className="font-mono text-xs text-slate-400 font-semibold">
+                      <span className="font-mono text-xs text-slate-500 dark:text-slate-400 font-semibold">
                         #{rankNum}
                       </span>
                     )}
@@ -105,12 +105,12 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
                           size={34}
                           className={`rounded-full ring-2 transition-transform duration-200 hover:scale-105 ${
                             rankNum === 1
-                              ? "ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                              ? "ring-yellow-400 shadow-sm"
                               : rankNum === 2
-                              ? "ring-slate-300 shadow-[0_0_8px_rgba(203,213,225,0.4)]"
+                              ? "ring-slate-300 shadow-sm"
                               : rankNum === 3
-                              ? "ring-amber-600 shadow-[0_0_8px_rgba(217,119,6,0.4)]"
-                              : "ring-slate-700/80 border border-slate-800"
+                              ? "ring-amber-500 shadow-sm"
+                              : "ring-slate-200 dark:ring-slate-700/80 border border-slate-100 dark:border-slate-800"
                           }`}
                         />
                         {rankNum <= 3 && (
@@ -126,15 +126,15 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
                           href={`/user/${encodeURIComponent(entry.username)}`}
                           className={`hover:underline font-semibold text-sm truncate ${
                             isCurrentUser
-                              ? "text-blue-400 hover:text-blue-300"
-                              : "text-slate-100 hover:text-blue-400"
+                              ? "text-blue-600 dark:text-blue-400 font-bold"
+                              : "text-slate-900 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400"
                           }`}
                           title={entry.username}
                         >
                           {entry.username}
                         </Link>
                         {isCurrentUser && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/40">
                             YOU
                           </span>
                         )}
@@ -144,9 +144,9 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
 
                   {/* Score Column */}
                   <TableCell className="text-right sm:text-center py-3 pr-4">
-                    <span className="font-bold text-sm text-cyan-400 font-mono tracking-tight">
+                    <span className="font-bold text-sm text-blue-600 dark:text-cyan-400 font-mono tracking-tight">
                       {entry.score.toLocaleString()}
-                      <span className="text-[11px] text-slate-400 font-normal ml-1">pts</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal ml-1">pts</span>
                     </span>
                   </TableCell>
                 </TableRow>

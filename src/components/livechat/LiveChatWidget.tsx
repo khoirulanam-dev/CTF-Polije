@@ -654,10 +654,14 @@ export default function LiveChatWidget() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-purple-600 px-4 py-3 text-white shadow-lg hover:bg-purple-700"
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-400 px-4 py-2.5 text-white font-bold text-sm shadow-[0_4px_25px_rgba(6,182,212,0.45)] hover:shadow-[0_4px_30px_rgba(6,182,212,0.7)] border border-cyan-200/40 hover:scale-105 active:scale-95 transition-all duration-200"
         >
-          <MessageSquare className="h-5 w-5" />
-          Live Chat
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <MessageSquare className="h-4 w-4 drop-shadow-sm" />
+          <span>Live Chat</span>
         </button>
       )}
 
