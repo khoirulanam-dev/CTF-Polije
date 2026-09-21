@@ -51,6 +51,10 @@ export interface Solve {
 export interface ChallengeWithSolve extends Challenge {
   is_solved?: boolean
   solved_at?: string // Add this line to support solved_at in UserProfile
+  total_solves?: number
+  has_first_blood?: boolean
+  is_new?: boolean
+  is_recently_created?: boolean
 }
 
 // export interface LeaderboardEntry {

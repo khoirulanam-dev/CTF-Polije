@@ -202,7 +202,7 @@ export default function LiveChatWidget() {
 
   // ---------- fetch mention users (RPC) ----------
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !open) return;
 
     (async () => {
       try {
@@ -230,7 +230,7 @@ export default function LiveChatWidget() {
         showNotice("mention hanya tampil jika policy select aktif");
       }
     })();
-  }, [userId, isAdmin]);
+  }, [userId, isAdmin, open]);
 
   // ---------- load messages when opened ----------
   useEffect(() => {
@@ -321,7 +321,7 @@ export default function LiveChatWidget() {
 
   // ---------- presence (online users + typing broadcast) ----------
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !open) return;
 
     const presence = supabase.channel("presence-global-chat", {
       config: { presence: { key: userId } },
@@ -387,7 +387,7 @@ export default function LiveChatWidget() {
         supabase.removeChannel(presenceChannelRef.current);
       presenceChannelRef.current = null;
     };
-  }, [userId, username, isAdmin]);
+  }, [userId, username, isAdmin, open]);
 
   // ---------- autoscroll ----------
   useEffect(() => {

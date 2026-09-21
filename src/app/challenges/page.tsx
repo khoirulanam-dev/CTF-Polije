@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 
 import {
@@ -11,7 +12,6 @@ import {
 } from "@/lib/challenges";
 import { ChallengeWithSolve, Attachment } from "@/types";
 import ChallengeCard from "@/components/challenges/ChallengeCard";
-import ChallengeDetailDialog from "@/components/challenges/ChallengeDetailDialog";
 import Loader from "@/components/custom/loading";
 import TitlePage from "@/components/custom/TitlePage";
 import { Solver } from "@/components/challenges/SolversList";
@@ -20,7 +20,16 @@ import APP from "@/config";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
-import LiveChatWidget from "@/components/livechat/LiveChatWidget";
+
+// Code-split heavy dialog & chat widget (only loaded on-demand)
+const ChallengeDetailDialog = dynamic(
+  () => import("@/components/challenges/ChallengeDetailDialog"),
+  { ssr: false }
+);
+const LiveChatWidget = dynamic(
+  () => import("@/components/livechat/LiveChatWidget"),
+  { ssr: false }
+);
 
 export default function ChallengesPage() {
   const router = useRouter();
@@ -62,9 +71,11 @@ export default function ChallengesPage() {
 
   // ambil challenges
   useEffect(() => {
+    let mounted = true;
     const fetchChallenges = async () => {
       if (!user) return;
       const challengesData = await getChallenges(user.id);
+      if (!mounted) return;
 
       // normalisasi field hint
       const normalized = challengesData.map((challenge: any) => {
@@ -97,6 +108,9 @@ export default function ChallengesPage() {
     };
 
     fetchChallenges();
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   // kalau detail kebuka → ambil solvers
@@ -135,16 +149,26 @@ export default function ChallengesPage() {
         flagInputs[challengeId].trim()
       );
 
-      // refresh list sesudah submit
-      const challengesData = await getChallenges(user.id);
-      setChallenges(challengesData);
-
       setFlagFeedback((prev) => ({
         ...prev,
         [challengeId]: { success: result.success, message: result.message },
       }));
 
       if (result.success) {
+        // Optimistic UI update: langsung tandai solve di state
+        setChallenges((prev) =>
+          prev.map((c) =>
+            c.id === challengeId
+              ? {
+                  ...c,
+                  is_solved: true,
+                  total_solves: (c.total_solves || 0) + 1,
+                  has_first_blood: true,
+                }
+              : c
+          )
+        );
+
         const audio = new Audio("/sounds/succes.wav");
         audio.volume = 0.3;
         audio.play().catch(() => {});
@@ -174,6 +198,13 @@ export default function ChallengesPage() {
         }
 
         setFlagInputs((prev) => ({ ...prev, [challengeId]: "" }));
+
+        // Refresh data di background untuk sinkronisasi poin
+        getChallenges(user.id).then((freshData) => {
+          if (freshData && freshData.length > 0) {
+            setChallenges(freshData);
+          }
+        }).catch(() => {});
       }
     } catch (err) {
       console.error(err);
@@ -186,93 +217,97 @@ export default function ChallengesPage() {
     }
   };
 
-  const handleFlagInputChange = (challengeId: string, value: string) => {
-    setFlagInputs((prev) => ({ ...prev, [challengeId]: value }));
-  };
-
-  // filter challenge
-  const filteredChallenges = challenges.filter((challenge) => {
-    if (filters.status === "solved" && !challenge.is_solved) return false;
-    if (filters.status === "unsolved" && challenge.is_solved) return false;
-    if (filters.category !== "all" && challenge.category !== filters.category)
-      return false;
-    if (
-      filters.difficulty !== "all" &&
-      challenge.difficulty !== filters.difficulty
-    )
-      return false;
-    if (filters.search) {
-      const k = filters.search.toLowerCase();
-      const titleMatch = challenge.title.toLowerCase().includes(k);
-      const descMatch = challenge.description.toLowerCase().includes(k);
-      if (!titleMatch && !descMatch) return false;
-    }
-    return true;
-  });
-
-  // urutan kategori
-  const preferredOrder = APP.challengeCategories || [];
-  const allCategories = Array.from(
-    new Set(challenges.map((c) => c.category))
-  ).filter(Boolean);
-
-  const matchedCategorySet = new Set<string>();
-  const categories = [
-    ...preferredOrder.flatMap((p) => {
-      const pLower = p.toLowerCase();
-      const found = allCategories.find((c) => {
-        const cLower = c.toLowerCase();
-        return cLower.includes(pLower) || pLower.includes(cLower);
-      });
-      if (found && !matchedCategorySet.has(found)) {
-        matchedCategorySet.add(found);
-        return found;
-      }
-      return [] as string[];
-    }),
-    ...allCategories.filter((c) => !matchedCategorySet.has(c)).sort(),
-  ];
-
-  const difficulties = Array.from(
-    new Set(challenges.map((c) => c.difficulty))
-  ).sort();
-
-  // kelompokkan per kategori
-  const grouped = filteredChallenges.reduce((acc, challenge) => {
-    if (!acc[challenge.category]) acc[challenge.category] = [];
-    acc[challenge.category].push(challenge);
-    return acc;
-  }, {} as { [key: string]: ChallengeWithSolve[] });
-
-  const groupKeys = Object.keys(grouped);
-  const matchedKeySet = new Set<string>();
-  const orderedKeys = [
-    ...preferredOrder.flatMap((p) => {
-      const pLower = p.toLowerCase();
-      const found = groupKeys.find((k) => {
-        const kLower = k.toLowerCase();
-        return kLower.includes(pLower) || pLower.includes(kLower);
-      });
-      if (found && !matchedKeySet.has(found)) {
-        matchedKeySet.add(found);
-        return found;
-      }
-      return [] as string[];
-    }),
-    ...groupKeys.filter((k) => !matchedKeySet.has(k)).sort(),
-  ];
-
-  // buat partikel deterministik biar ga mismatch
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 26 }).map((_, i) => ({
-        top: `${(i * 37) % 100}%`,
-        left: `${(i * 19) % 100}%`,
-        size: (i % 3) + 2,
-        duration: 4 + (i % 5),
-      })),
+  const handleFlagInputChange = useCallback(
+    (challengeId: string, value: string) => {
+      setFlagInputs((prev) => ({ ...prev, [challengeId]: value }));
+    },
     []
   );
+
+  // filter challenge dengan memoization
+  const filteredChallenges = useMemo(() => {
+    const k = filters.search.toLowerCase().trim();
+    return challenges.filter((challenge) => {
+      if (filters.status === "solved" && !challenge.is_solved) return false;
+      if (filters.status === "unsolved" && challenge.is_solved) return false;
+      if (filters.category !== "all" && challenge.category !== filters.category)
+        return false;
+      if (
+        filters.difficulty !== "all" &&
+        challenge.difficulty !== filters.difficulty
+      )
+        return false;
+      if (k) {
+        const titleMatch = challenge.title.toLowerCase().includes(k);
+        const descMatch = (challenge.description || "")
+          .toLowerCase()
+          .includes(k);
+        if (!titleMatch && !descMatch) return false;
+      }
+      return true;
+    });
+  }, [challenges, filters]);
+
+  // urutan kategori dengan memoization
+  const categories = useMemo(() => {
+    const preferredOrder = APP.challengeCategories || [];
+    const allCategories = Array.from(
+      new Set(challenges.map((c) => c.category))
+    ).filter(Boolean);
+
+    const matchedCategorySet = new Set<string>();
+    return [
+      ...preferredOrder.flatMap((p) => {
+        const pLower = p.toLowerCase();
+        const found = allCategories.find((c) => {
+          const cLower = c.toLowerCase();
+          return cLower.includes(pLower) || pLower.includes(cLower);
+        });
+        if (found && !matchedCategorySet.has(found)) {
+          matchedCategorySet.add(found);
+          return found;
+        }
+        return [] as string[];
+      }),
+      ...allCategories.filter((c) => !matchedCategorySet.has(c)).sort(),
+    ];
+  }, [challenges]);
+
+  const difficulties = useMemo(() => {
+    return Array.from(
+      new Set(challenges.map((c) => c.difficulty))
+    ).sort();
+  }, [challenges]);
+
+  // kelompokkan per kategori dengan memoization
+  const { grouped, orderedKeys } = useMemo(() => {
+    const preferredOrder = APP.challengeCategories || [];
+    const grp = filteredChallenges.reduce((acc, challenge) => {
+      if (!acc[challenge.category]) acc[challenge.category] = [];
+      acc[challenge.category].push(challenge);
+      return acc;
+    }, {} as { [key: string]: ChallengeWithSolve[] });
+
+    const groupKeys = Object.keys(grp);
+    const matchedKeySet = new Set<string>();
+    const ordKeys = [
+      ...preferredOrder.flatMap((p) => {
+        const pLower = p.toLowerCase();
+        const found = groupKeys.find((k) => {
+          const kLower = k.toLowerCase();
+          return kLower.includes(pLower) || pLower.includes(kLower);
+        });
+        if (found && !matchedKeySet.has(found)) {
+          matchedKeySet.add(found);
+          return found;
+        }
+        return [] as string[];
+      }),
+      ...groupKeys.filter((k) => !matchedKeySet.has(k)).sort(),
+    ];
+
+    return { grouped: grp, orderedKeys: ordKeys };
+  }, [filteredChallenges]);
 
   const downloadFile = async (
     attachment: Attachment,
@@ -303,102 +338,25 @@ export default function ChallengesPage() {
     }
   };
 
+  const solvedCount = useMemo(
+    () => challenges.filter((c) => c.is_solved).length,
+    [challenges]
+  );
+
   if (loading) return <Loader fullscreen color="text-orange-500" />;
   if (!user) return null;
 
-  // wrapper untuk section & card (kalau reducedMotion → pakai div biasa)
-  const Section: any = reducedMotion ? "div" : motion.div;
-  const CardWrapper: any = reducedMotion ? "div" : motion.div;
-
   return (
     <div className="relative min-h-screen pt-5 overflow-hidden">
-      {/* background dinamis dimatikan kalau reducedMotion */}
-      {!reducedMotion && (
-        <>
-          {/* 1) gradient dinamis */}
-          <motion.div
-            aria-hidden
-            className="fixed inset-0 -z-30 bg-[radial-gradient(ellipse_at_top_left,_#0ea5e9_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_#4f46e5_0%,_transparent_55%)] blur-3xl"
-            animate={{
-              backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
-            }}
-            transition={{
-              duration: 25,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-          />
-
-          {/* 2) glow stream */}
-          <motion.div
-            aria-hidden
-            className="fixed inset-0 -z-20 opacity-20 bg-[repeating-linear-gradient(180deg,_rgba(148,163,184,0.12)_0px,_rgba(148,163,184,0.12)_2px,_transparent_2px,_transparent_6px)]"
-            animate={{
-              backgroundPositionY: ["0%", "100%"],
-            }}
-            transition={{
-              duration: 13,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-          />
-
-          {/* 3) partikel */}
-          <motion.div
-            aria-hidden
-            className="fixed inset-0 -z-10 pointer-events-none"
-            animate={{
-              opacity: [0.3, 0.7, 0.3],
-            }}
-            transition={{
-              duration: 7,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          >
-            {particles.map((p, i) => (
-              <motion.div
-                key={i}
-                className="absolute rounded-full bg-cyan-200/40"
-                style={{
-                  top: p.top,
-                  left: p.left,
-                  width: p.size,
-                  height: p.size,
-                }}
-                animate={{
-                  y: [0, -8, 0],
-                  opacity: [0.2, 1, 0.2],
-                }}
-                transition={{
-                  duration: p.duration,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                  delay: i * 0.13,
-                }}
-              />
-            ))}
-          </motion.div>
-        </>
-      )}
-
-      {/* style scrollbar */}
-      <style jsx global>{`
-        /* webkit scroll */
-        ::-webkit-scrollbar {
-          width: 9px;
-        }
-        ::-webkit-scrollbar-track {
-          background: rgba(2, 6, 23, 0.2);
-        }
-        ::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, #38bdf8 0%, #0f172a 80%);
-          border-radius: 9999px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(180deg, #0ea5e9 0%, #1d4ed8 100%);
-        }
-      `}</style>
+      {/* Background halus berbasis CSS (GPU-accelerated, zero JS main-thread load) */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-30 pointer-events-none bg-[radial-gradient(ellipse_at_top_left,_rgba(14,165,233,0.14)_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(79,70,229,0.14)_0%,_transparent_55%)]"
+      />
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-20 pointer-events-none opacity-15 bg-[repeating-linear-gradient(180deg,_rgba(148,163,184,0.12)_0px,_rgba(148,163,184,0.12)_2px,_transparent_2px,_transparent_6px)]"
+      />
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-5 pb-20">
         {/* header */}
@@ -413,9 +371,7 @@ export default function ChallengesPage() {
             </div>
             <div className="rounded-2xl bg-slate-900/40 border border-slate-700/70 px-4 py-2 text-sm text-slate-100">
               Solved:{" "}
-              <span className="font-semibold">
-                {challenges.filter((c) => c.is_solved).length}
-              </span>
+              <span className="font-semibold">{solvedCount}</span>
             </div>
           </div>
         </div>
@@ -458,18 +414,8 @@ export default function ChallengesPage() {
               </p>
             </div>
           ) : (
-            orderedKeys.map((category, idx) => (
-              <Section
-                key={category}
-                {...(!reducedMotion
-                  ? {
-                      initial: { opacity: 0, y: 16 },
-                      animate: { opacity: 1, y: 0 },
-                      transition: { duration: 0.35, delay: idx * 0.04 },
-                    }
-                  : {})}
-                className="space-y-3"
-              >
+            orderedKeys.map((category) => (
+              <section key={category} className="space-y-3">
                 {/* judul kategori */}
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 via-cyan-300 to-blue-600 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
@@ -477,47 +423,34 @@ export default function ChallengesPage() {
                     {category}
                   </h2>
                   <span className="ml-2 text-xs font-semibold text-sky-400 bg-sky-500/10 px-2 py-[1px] rounded-md border border-sky-600/40">
-                    {grouped[category].length} Challenges
+                    {grouped[category]?.length || 0} Challenges
                   </span>
                 </div>
 
                 {/* grid challenge */}
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                  {grouped[category].map((challenge) => (
-                    <CardWrapper
+                  {grouped[category]?.map((challenge) => (
+                    <ChallengeCard
                       key={challenge.id}
-                      {...(!reducedMotion
-                        ? {
-                            whileHover: { y: -5, scale: 1.02 },
-                            transition: {
-                              type: "spring",
-                              stiffness: 240,
-                              damping: 18,
-                            },
-                          }
-                        : {})}
-                    >
-                      <ChallengeCard
-                        challenge={challenge}
-                        onClick={() => setSelectedChallenge(challenge)}
-                      />
-                    </CardWrapper>
+                      challenge={challenge}
+                      onClick={() => setSelectedChallenge(challenge)}
+                    />
                   ))}
                 </div>
-              </Section>
+              </section>
             ))
           )}
         </div>
       </div>
 
-      {/* dialog detail */}
-      {user && (
+      {/* dialog detail (code-split & dynamically loaded) */}
+      {user && selectedChallenge && (
         <ChallengeDetailDialog
           open={!!selectedChallenge}
           challenge={selectedChallenge}
           solvers={solvers}
           challengeTab={challengeTab}
-          setChallengeTab={(tab, challengeId) => {
+          setChallengeTab={(tab) => {
             if (tab === "solvers" && selectedChallenge) {
               handleTabChange(tab, selectedChallenge.id);
             } else {

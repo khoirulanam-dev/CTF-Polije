@@ -1,11 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // App Router sudah default di Next.js 14, tidak perlu experimental.appDir
-};
-
-module.exports = {
+  compress: true,
   images: {
-    domains: ["https://aylbpzcohwuvnhiemtly.supabase.co"],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'aylbpzcohwuvnhiemtly.supabase.co',
+        pathname: '/**',
+      },
+    ],
+  },
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'date-fns',
+      'framer-motion',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-select',
+      '@radix-ui/react-switch',
+    ],
   },
 };
 

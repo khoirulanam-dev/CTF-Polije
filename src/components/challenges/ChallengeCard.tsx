@@ -1,5 +1,4 @@
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { motion } from "framer-motion";
 import { ChallengeWithSolve } from "@/types";
 import React from "react";
 import APP from '@/config';
@@ -34,15 +33,13 @@ const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick }) => 
   const diffCircleColor = colorMap[colorName] || 'bg-gray-300';
 
   return (
-    <motion.div
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.97 }}
+    <div
       key={challenge.id}
-      className="relative overflow-hidden"
+      className="relative overflow-hidden transition-transform duration-150 ease-out hover:-translate-y-1 hover:scale-[1.02] active:scale-[0.98] will-change-transform"
     >
       {/* Ribbon pojok kanan atas */}
       {ribbonLabel && (
-        <div className="absolute top-2 right-[-32px] rotate-45 translate-y-[16px]">
+        <div className="absolute top-2 right-[-32px] rotate-45 translate-y-[16px] pointer-events-none z-20">
           <div className="bg-green-500 text-white text-[10px] font-bold px-8 py-1 shadow-md">
             {ribbonLabel}
           </div>
@@ -50,13 +47,13 @@ const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick }) => 
       )}
 
       {/* Difficulty circle kanan atas */}
-      <div className="absolute top-2 right-2 z-10">
+      <div className="absolute top-2 right-2 z-10 pointer-events-none">
         <span className={`block w-2 h-2 rounded-full shadow ${diffCircleColor}`}></span>
       </div>
 
       <Card
         onClick={onClick}
-        className={`cursor-pointer shadow-md rounded-md transition-colors
+        className={`cursor-pointer shadow-md rounded-md transition-colors select-none
           ${challenge.is_solved
             ? 'bg-green-600 dark:bg-green-700'
             : 'bg-blue-600 dark:bg-blue-700'}
@@ -82,8 +79,8 @@ const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick }) => 
           🪙 {challenge.points}
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 };
 
-export default ChallengeCard;
+export default React.memo(ChallengeCard);

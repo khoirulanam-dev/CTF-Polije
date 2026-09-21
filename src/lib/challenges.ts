@@ -20,44 +20,40 @@ export async function getChallenges(
   showAll: boolean = false
 ): Promise<(ChallengeWithSolve & { has_first_blood: boolean; is_new: boolean })[]> {
   try {
-    // 🔹 Ambil challenge list
+    // 🔹 Siapkan query challenge list
     let query = supabase
       .from('challenges')
       .select('*')
       .order('points', { ascending: true })        // poin terendah dulu
-      .order('total_solves', { ascending: false }) // jika poin sama, paling banyak solves dulu
+      .order('total_solves', { ascending: false }); // jika poin sama, paling banyak solves dulu
 
     if (!showAll) query = query.eq('is_active', true);
 
-    const { data: challenges, error } = await query;
-    if (error) throw new Error(error.message);
+    // 🔹 Siapkan query solved user jika ada userId
+    const solvesQuery = userId
+      ? supabase.from('solves').select('challenge_id').eq('user_id', userId)
+      : null;
+
+    // 🔹 Jalankan kedua query secara paralel (menghilangkan network waterfall)
+    const [challengesResult, solvesResult] = await Promise.all([
+      query,
+      solvesQuery,
+    ]);
+
+    if (challengesResult.error) throw new Error(challengesResult.error.message);
+    const challenges = challengesResult.data;
     if (!challenges) return [];
 
-    // 🔹 Ambil notif first blood dari RPC
-    const notifications = (await getNotifications(500, 0)) as any[];
+    const solvedIds = new Set<string>(solvesResult?.data?.map((s) => s.challenge_id) || []);
 
-    // Cuma ambil yang notif_type = first_blood
-    const fbIds = new Set(
-      notifications
-        .filter((n) => n.notif_type === 'first_blood')
-        .map((n) => n.notif_challenge_id)
-    );
-
-    // 🔹 Cek solved user (optional)
-    let solvedIds = new Set<string>();
-    if (userId) {
-      const { data: solves } = await supabase
-        .from('solves')
-        .select('challenge_id')
-        .eq('user_id', userId);
-
-      solvedIds = new Set(solves?.map((s) => s.challenge_id) || []);
-    }
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
 
     return challenges.map(ch => {
       const createdAt = new Date(ch.created_at);
-      const isRecentlyCreated = (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000;
-      const hasFirstBlood = fbIds.has(ch.id);
+      const isRecentlyCreated = (now - createdAt.getTime()) < oneDayMs;
+      // First blood sudah terjadi jika total_solves > 0
+      const hasFirstBlood = (ch.total_solves || 0) > 0;
 
       return {
         ...ch,
