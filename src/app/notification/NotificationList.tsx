@@ -1,31 +1,35 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { getNotifications } from "@/lib/challenges";
+import { getCombinedNotifications } from "@/lib/challenges";
+import { AppNotification } from "@/types";
 import Link from "next/link";
 import Loader from "@/components/custom/loading";
-import { formatRelativeDate } from '@/lib/utils'
-
-export type Notification = {
-  notif_type: "new_challenge" | "first_blood";
-  notif_challenge_id: string;
-  notif_challenge_title: string;
-  notif_category: string;
-  notif_user_id?: string;
-  notif_username?: string;
-  notif_created_at: string;
-};
+import { formatRelativeDate } from "@/lib/utils";
 
 export default function NotificationList() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      const notifs = await getNotifications();
-      setNotifications(notifs);
-      setLoading(false);
+      try {
+        const notifs = await getCombinedNotifications(100);
+        if (mounted) {
+          setNotifications(notifs);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load notifications:", err);
+        if (mounted) setLoading(false);
+      }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (loading) return <Loader fullscreen color="text-orange-500" />;
@@ -36,96 +40,113 @@ export default function NotificationList() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="border rounded-lg px-4 py-6 shadow bg-white dark:bg-gray-800 dark:border-gray-700 flex flex-col items-center justify-center text-center text-sm text-gray-600 dark:text-gray-300"
+        className="border rounded-2xl px-6 py-10 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-800 flex flex-col items-center justify-center text-center text-sm text-gray-600 dark:text-gray-300"
       >
-        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 mb-3">
-          <svg
-            width="22"
-            height="22"
-            fill="none"
-            stroke="#3b82f6"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            viewBox="0 0 24 24"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <circle cx="12" cy="16" r="1" />
-          </svg>
+        <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-950/60 border border-blue-500/20 mb-3 text-2xl">
+          🔔
         </div>
-        <p className="font-medium text-gray-700 dark:text-gray-200">No notifications found</p>
-        <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">You’re all caught up!</p>
+        <p className="font-semibold text-gray-800 dark:text-gray-100 text-base">Belum Ada Notifikasi</p>
+        <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">Anda sudah melihat semua update terbaru!</p>
       </motion.div>
     );
 
   return (
-    <ul className="space-y-2">
-      {notifications.map((notif, idx) => (
-        <motion.li
-          key={idx}
-          className="border rounded-lg px-4 py-3 shadow bg-white dark:bg-gray-800 dark:border-gray-700 flex items-center gap-3 text-sm hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors duration-150"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: idx * 0.03 }}
-        >
-          {/* Icon */}
-          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 mr-2">
-            {notif.notif_type === "new_challenge" ? (
-              <svg
-                width="20"
-                height="20"
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                viewBox="0 0 24 24"
+    <ul className="space-y-3">
+      {notifications.map((notif, idx) => {
+        const isFeature = notif.notif_type === "feature_update";
+        const isSystem = notif.notif_type === "system_update";
+        const isNewChall = notif.notif_type === "new_challenge";
+        const isFirstBlood = notif.notif_type === "first_blood";
+
+        return (
+          <motion.li
+            key={notif.id || idx}
+            className={`border rounded-2xl p-4 shadow-sm transition-all duration-200 ${
+              isFeature
+                ? "bg-cyan-950/20 border-cyan-500/30 hover:border-cyan-500/50 hover:bg-cyan-950/30"
+                : isNewChall
+                ? "bg-slate-900/60 border-slate-800 hover:border-amber-500/40 hover:bg-slate-900/80"
+                : isFirstBlood
+                ? "bg-slate-900/60 border-slate-800 hover:border-red-500/40 hover:bg-slate-900/80"
+                : "bg-purple-950/20 border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-950/30"
+            }`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: Math.min(idx * 0.03, 0.4) }}
+          >
+            <div className="flex items-start gap-3.5">
+              {/* Icon badge */}
+              <span
+                className={`flex items-center justify-center shrink-0 w-10 h-10 rounded-xl text-lg ${
+                  isFeature
+                    ? "bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                    : isNewChall
+                    ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                    : isFirstBlood
+                    ? "bg-red-500/10 border border-red-500/30 text-red-400"
+                    : "bg-purple-500/10 border border-purple-500/30 text-purple-400"
+                }`}
               >
-                <path d="M12 19V6" />
-                <path d="M5 12l7-7 7 7" />
-              </svg>
-            ) : (
-              <span className="text-lg">🩸</span>
-            )}
-          </span>
+                {isFeature ? "✨" : isNewChall ? "🚩" : isFirstBlood ? "🩸" : "🚀"}
+              </span>
 
-          {/* Content */}
-          <div className="flex-1 flex flex-wrap items-center gap-x-2">
-            {notif.notif_type === "new_challenge" ? (
-              <>
-                <span className="font-semibold text-blue-600 dark:text-blue-300">New Challenge:</span>
-                <span className="dark:text-gray-100 font-medium">{notif.notif_challenge_title}</span>
-                <span className="text-gray-500 dark:text-gray-400">[{notif.notif_category}]</span>
-              </>
-            ) : (
-              <>
-                <span className="font-semibold text-green-600 dark:text-green-300">First Blood</span>
-                <span className="inline-flex items-center gap-1">
-                  <Link
-                    href={notif.notif_username ? `/user/${notif.notif_username}` : "#"}
-                    className="text-blue-600 dark:text-blue-300 font-medium hover:underline"
+              {/* Content body */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span
+                    className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border tracking-wide ${
+                      isFeature
+                        ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                        : isNewChall
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        : isFirstBlood
+                        ? "bg-red-500/20 text-red-300 border-red-500/40"
+                        : "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                    }`}
                   >
-                    <span className="inline-flex items-center gap-1">
-                      {notif.notif_username && notif.notif_username.length > 20
-                        ? `${notif.notif_username.slice(0, 20)}...`
-                        : notif.notif_username}
-                    </span>
-                  </Link>
-                </span>
-                <span className="text-gray-700 dark:text-gray-300">solved</span>
-                <b className="dark:text-gray-100 font-medium">{notif.notif_challenge_title}</b>
-                <span className="text-gray-500 dark:text-gray-400">[{notif.notif_category}]</span>
-              </>
-            )}
-          </div>
+                    {notif.badge || (isFeature ? "FITUR BARU" : isNewChall ? "SOAL BARU" : "FIRST BLOOD")}
+                  </span>
 
-          {/* Date */}
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-2 whitespace-nowrap">
-            {notif.notif_created_at ? formatRelativeDate(notif.notif_created_at) : ""}
-          </span>
-        </motion.li>
-      ))}
+                  {notif.category && (
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60">
+                      [{notif.category}]
+                    </span>
+                  )}
+
+                  <span className="text-xs text-gray-400 dark:text-slate-500 ml-auto whitespace-nowrap">
+                    {notif.created_at ? formatRelativeDate(notif.created_at) : ""}
+                  </span>
+                </div>
+
+                {/* Title */}
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide mt-1">
+                  {notif.title}
+                </h3>
+
+                {/* Description or details */}
+                {notif.description && (
+                  <p className="text-xs text-gray-600 dark:text-slate-300 mt-1 leading-relaxed">
+                    {notif.description}
+                  </p>
+                )}
+
+                {/* Action Link if available */}
+                {notif.link && (
+                  <div className="mt-2.5">
+                    <Link
+                      href={notif.link}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
+                    >
+                      <span>Buka Halaman</span>
+                      <span>→</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.li>
+        );
+      })}
     </ul>
   );
 }

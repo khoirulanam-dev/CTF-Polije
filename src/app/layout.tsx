@@ -129,6 +129,8 @@ export const metadata: Metadata = {
   },
 };
 
+import TopAlertBanner from "@/components/notifications/TopAlertBanner";
+
 export default function RootLayout({
   children,
 }: {
@@ -143,6 +145,7 @@ export default function RootLayout({
               <ReducedMotionProvider>
                 <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
                   <Navbar />
+                  <TopAlertBanner />
                   <div className="pt-14">{children}</div>
                   <Toaster position="top-right" reverseOrder={false} />
                   <Analytics />

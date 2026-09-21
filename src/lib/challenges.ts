@@ -10,7 +10,7 @@ export async function getUserRank(username: string): Promise<number | null> {
   return idx !== -1 ? idx + 1 : null;
 }
 import { supabase } from './supabase'
-import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment } from '@/types'
+import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment, Announcement, AppNotification } from '@/types'
 
 /**
  * Get all challenges
@@ -529,6 +529,95 @@ export async function getNotifications(limit = 100, offset = 0) {
   }
   // console.log(data)
   return data || [];
+}
+
+/**
+  * Get active announcements (feature upgrades, system updates)
+  */
+export async function getAnnouncements(limit = 20): Promise<Announcement[]> {
+  try {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      // Return empty array gracefully if table does not exist yet
+      console.warn('Announcements fetch notice:', error.message);
+      return [];
+    }
+    return (data || []) as Announcement[];
+  } catch (err) {
+    console.error('Failed to get announcements:', err);
+    return [];
+  }
+}
+
+/**
+ * Get unified notifications (announcements, new challenges, and first bloods)
+ */
+export async function getCombinedNotifications(limit = 100): Promise<AppNotification[]> {
+  const [announcementsRes, notifsRes] = await Promise.allSettled([
+    getAnnouncements(limit),
+    getNotifications(limit, 0),
+  ]);
+
+  const list: AppNotification[] = [];
+
+  // Add announcements
+  if (announcementsRes.status === 'fulfilled' && Array.isArray(announcementsRes.value)) {
+    for (const a of announcementsRes.value) {
+      list.push({
+        id: `announcement-${a.id}`,
+        notif_type: a.type === 'feature' ? 'feature_update' : 'system_update',
+        title: a.title,
+        description: a.description,
+        badge: a.badge || (a.type === 'feature' ? 'FITUR BARU' : 'UPDATE'),
+        link: a.link || '/challenges',
+        created_at: a.created_at,
+      });
+    }
+  }
+
+  // Add challenge notifications
+  if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value)) {
+    for (const n of notifsRes.value) {
+      if (n.notif_type === 'new_challenge') {
+        list.push({
+          id: `new_chall-${n.notif_challenge_id}-${n.notif_created_at}`,
+          notif_type: 'new_challenge',
+          title: `Soal Baru: ${n.notif_challenge_title}`,
+          description: `Tantangan baru kategori ${n.notif_category} siap dikerjakan!`,
+          badge: 'SOAL BARU',
+          category: n.notif_category,
+          challenge_id: n.notif_challenge_id,
+          link: '/challenges',
+          created_at: n.notif_created_at,
+        });
+      } else if (n.notif_type === 'first_blood') {
+        list.push({
+          id: `fb-${n.notif_challenge_id}-${n.notif_user_id}-${n.notif_created_at}`,
+          notif_type: 'first_blood',
+          title: `First Blood: ${n.notif_challenge_title}`,
+          description: `${n.notif_username || 'Seseorang'} berhasil merebut first blood!`,
+          badge: 'FIRST BLOOD',
+          category: n.notif_category,
+          challenge_id: n.notif_challenge_id,
+          user_id: n.notif_user_id,
+          username: n.notif_username,
+          link: n.notif_username ? `/user/${encodeURIComponent(n.notif_username)}` : '/challenges',
+          created_at: n.notif_created_at,
+        });
+      }
+    }
+  }
+
+  // Sort by date descending
+  list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return list.slice(0, limit);
 }
 
 /**

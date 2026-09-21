@@ -75,3 +75,28 @@ export type LeaderboardEntry = {
     score: number
   }[]
 }
+
+export interface Announcement {
+  id: string
+  title: string
+  description: string
+  type: 'feature' | 'challenge' | 'system' | 'maintenance'
+  badge?: string
+  link?: string | null
+  created_at: string
+  is_active: boolean
+}
+
+export type AppNotification = {
+  id: string
+  notif_type: 'feature_update' | 'new_challenge' | 'first_blood' | 'system_update'
+  title: string
+  description?: string
+  badge?: string
+  category?: string
+  challenge_id?: string
+  user_id?: string
+  username?: string
+  link?: string
+  created_at: string
+}
