@@ -282,7 +282,16 @@ export async function getCurrentUser(): Promise<User | null> {
         return null;
       }
     }
-    console.log("Current user data:", userData);
+
+    if (userData) {
+      const isActuallyAdmin = Boolean(userData.is_admin === true || userData.role === 'admin');
+      const role = isActuallyAdmin 
+        ? 'admin' 
+        : (userData.role === 'contributor' ? 'contributor' : 'user');
+      userData.role = role;
+      userData.is_admin = isActuallyAdmin;
+      userData.is_contributor = !isActuallyAdmin && role === 'contributor';
+    }
     return userData;
   } catch (error) {
     return null;
@@ -294,14 +303,43 @@ export async function getCurrentUser(): Promise<User | null> {
  */
 export async function isAdmin(): Promise<boolean> {
   try {
+    const user = await getCurrentUser();
+    if (user && (user.is_admin || user.role === 'admin')) return true;
     const { data, error } = await supabase.rpc("is_admin");
     if (error) {
-      console.error("Error checking admin status:", error);
-      return false;
+      return Boolean(user?.is_admin || user?.role === 'admin');
     }
-    return data || false;
+    return Boolean(data);
   } catch (error) {
-    console.error("Error checking admin status:", error);
     return false;
+  }
+}
+
+/**
+ * Check if current user is contributor (strictly not admin)
+ */
+export async function isContributor(): Promise<boolean> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return false;
+    if (user.is_admin || user.role === 'admin') return false;
+    return user.role === 'contributor' || user.is_contributor === true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Get role of current user
+ */
+export async function getUserRole(): Promise<'admin' | 'contributor' | 'user'> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return 'user';
+    if (user.is_admin || user.role === 'admin') return 'admin';
+    if (user.role === 'contributor') return 'contributor';
+    return 'user';
+  } catch {
+    return 'user';
   }
 }

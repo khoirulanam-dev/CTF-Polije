@@ -18,7 +18,7 @@ export const APP = {
     'Boot2-Root',
   ],
   links: {
-    github: 'https://github.com/Anam1602',
+    github: 'https://github.com/khoirulanam-dev/CTF-Polije',
     discord: 'https://discord.gg/bbVU2Ab2',
     nextjs: 'https://nextjs.org/',
     tailwind: 'https://tailwindcss.com/',

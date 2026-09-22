@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { Attachment, Challenge } from '@/types'
 import { getFlag } from '@/lib/challenges'
+import { useAuth } from '@/contexts/AuthContext'
 import APP from '@/config'
 
 interface ChallengeFormDialogProps {
@@ -32,6 +33,7 @@ interface ChallengeFormDialogProps {
   onRemoveAttachment: (i: number) => void
   setShowPreview: (v: boolean) => void
   categories: string[]
+  seasons?: { id: string; number: number; name: string; status: string }[]
 }
 
 const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
@@ -51,13 +53,15 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
   onRemoveAttachment,
   setShowPreview,
   categories,
+  seasons,
 }) => {
 
-  // small modal for viewing flag in the form
   const [flagPreviewOpen, setFlagPreviewOpen] = useState(false)
   const [flagLoading, setFlagLoading] = useState(false)
   const [fetchedFlag, setFetchedFlag] = useState<string | null>(null)
   const [copySuccess, setCopySuccess] = useState(false)
+  const { user } = useAuth()
+  const currentAuthor = user?.username || 'Admin'
 
   return (
     <>
@@ -71,6 +75,14 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="md:col-span-2 flex items-center justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Author Soal:</span>
+                <span className="font-mono font-bold text-blue-600 dark:text-blue-400">@{editing?.author || currentAuthor}</span>
+              </div>
+              <span className="text-[11px] text-slate-400 italic">Otomatis dari akun login</span>
+            </div>
+
             <div className="md:col-span-2 flex items-center gap-4">
               <Label className="flex items-center gap-2">
                 <Switch
@@ -98,6 +110,29 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
                 Dynamic Scoring
               </Label>
             </div>
+
+            {seasons && seasons.length > 0 && (
+              <div className="md:col-span-2">
+                <Label className="mb-1">Target Season</Label>
+                <Select
+                  value={formData.season_id || 'none'}
+                  onValueChange={v => onChange({ ...formData, season_id: v === 'none' ? null : v })}
+                >
+                  <SelectTrigger className="w-full transition-colors bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:border-primary-500 rounded-md shadow-sm">
+                    <SelectValue placeholder="Pilih Season..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg">
+                    <SelectItem value="none">Tanpa Season (Global)</SelectItem>
+                    {seasons.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        Season #{s.number}: {s.name} ({s.status.toUpperCase()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <Label>Title</Label>
               <Input
@@ -257,10 +292,24 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
               )}
             </div>
             <div className="md:col-span-2">
-              <Label>Flag</Label>
-              {/* <div className="grid grid-cols-12 gap-2 pointer-events-auto"> */}
-              <div className="flex gap-2 pointer-events-auto">
-                <Input required={!editing} value={formData.flag} onChange={e => onChange({ ...formData, flag: e.target.value })} placeholder={editing ? 'Leave blank to keep current' : 'ctf{...}'} className="col-span-11 transition-colors bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 rounded-md shadow-sm" />
+              <div className="flex items-center justify-between">
+                <Label>Flag</Label>
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Format: <span className="text-pink-500 font-semibold">POLIJE&#123;.......&#125;</span>
+                </span>
+              </div>
+              <div className="flex gap-2 pointer-events-auto mt-1">
+                <Input
+                  required={!editing}
+                  value={formData.flag}
+                  onChange={e => onChange({ ...formData, flag: e.target.value })}
+                  placeholder={editing ? 'Biarkan kosong untuk mempertahankan flag lama' : 'POLIJE{flag_rahasia_anda}'}
+                  className={`col-span-11 font-mono transition-colors bg-white dark:bg-gray-800 border ${
+                    formData.flag && !/^POLIJE\{[ -~]+\}$/.test(formData.flag.trim())
+                      ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                      : 'border-gray-300 dark:border-gray-600 focus:border-primary-500'
+                  } dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 rounded-md shadow-sm`}
+                />
                 <Button
                   aria-label="Show flag"
                   title="Show flag"
@@ -295,6 +344,11 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
                   {flagLoading ? <span className="animate-pulse">…</span> : <Flag size={18} />}
                 </Button>
               </div>
+              {formData.flag && !/^POLIJE\{[ -~]+\}$/.test(formData.flag.trim()) && (
+                <p className="text-xs text-red-500 mt-1 font-mono">
+                  ⚠ Format flag tidak sesuai! Flag harus diawali "POLIJE&#123;" dan diakhiri "&#125;".
+                </p>
+              )}
             </div>
             <div className="md:col-span-2">
               <div className="flex items-center justify-between">

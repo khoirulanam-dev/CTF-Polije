@@ -235,8 +235,34 @@ select {
 }
 
 html.reduced-motion,
-html.reduced-motion * {
+html.reduced-motion *,
+html.reduced-motion *::before,
+html.reduced-motion *::after {
   scroll-behavior: auto !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
   animation: none !important;
+  transition-duration: 0.001ms !important;
   transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  will-change: auto !important;
 }
+
+html.reduced-motion .animate-ping,
+html.reduced-motion .animate-spin,
+html.reduced-motion .animate-pulse,
+html.reduced-motion .animate-bounce,
+html.reduced-motion [class*="animate-"] {
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+/* Hentikan elemen canvas animasi ketika reduced motion aktif */
+html.reduced-motion canvas:not([role="img"]) {
+  display: none !important;
+}
+

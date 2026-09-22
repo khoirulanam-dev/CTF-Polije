@@ -8,9 +8,11 @@ interface ChallengeCardProps {
     is_new?: boolean;
   };
   onClick: () => void;
+  isLocked?: boolean;
+  isOwnChallenge?: boolean;
 }
 
-const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick }) => {
+const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick, isLocked, isOwnChallenge }) => {
   const isRecentlyCreated = challenge.is_new;
   const noFirstBlood = !challenge.has_first_blood;
 
@@ -46,6 +48,10 @@ const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick }) => 
       className={`group relative cursor-pointer select-none rounded-xl p-4 sm:p-5 transition-all duration-150 ease-out hover:-translate-y-1 shadow-sm hover:shadow-md ${
         isSolved
           ? "bg-emerald-50/70 dark:bg-[#131b26] border-2 border-emerald-500/60 hover:border-emerald-500 hover:bg-emerald-50/90 dark:hover:border-emerald-400 dark:hover:bg-[#131b26]"
+          : isLocked
+          ? "bg-slate-100/50 dark:bg-[#0f151e] border border-amber-500/30 opacity-80 hover:opacity-100"
+          : isOwnChallenge
+          ? "bg-white dark:bg-[#131b26] border border-purple-500/50 hover:border-purple-400 shadow-purple-950/20 shadow-sm"
           : "bg-white dark:bg-[#131b26] border border-slate-200 dark:border-[#263347] hover:border-blue-400 dark:hover:border-[#3f5373] hover:bg-slate-50/80 dark:hover:bg-[#172130]"
       }`}
     >
@@ -60,7 +66,19 @@ const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick }) => 
         </div>
 
         <div className="flex items-center gap-1.5">
-          {ribbonLabel && !isSolved && (
+          {isLocked && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+              <span>🔒</span> Terkunci
+            </span>
+          )}
+
+          {isOwnChallenge && !isSolved && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
+              <span>✏</span> Soal Anda
+            </span>
+          )}
+
+          {ribbonLabel && !isSolved && !isLocked && !isOwnChallenge && (
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
                 noFirstBlood

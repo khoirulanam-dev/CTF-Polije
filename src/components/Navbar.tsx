@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import ImageWithFallback from "./ImageWithFallback";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { signOut, isAdmin } from "@/lib/auth";
+import { signOut, isAdmin, isContributor } from "@/lib/auth";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import APP from "@/config";
 
@@ -19,12 +19,15 @@ export default function Navbar() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [adminStatus, setAdminStatus] = useState(false);
+  const [contribStatus, setContribStatus] = useState(false);
 
   useEffect(() => {
     if (user) {
       isAdmin().then(setAdminStatus);
+      isContributor().then(setContribStatus);
     } else {
       setAdminStatus(false);
+      setContribStatus(false);
     }
   }, [user]);
 
@@ -38,6 +41,12 @@ export default function Navbar() {
 
   // helper buat active state
   const isActive = (path: string) => pathname === path;
+
+  // Strict role check: admin strictly cannot be contributor
+  const isActuallyAdmin = Boolean(user?.is_admin || user?.role === 'admin' || adminStatus);
+  const isActuallyContributor = Boolean(
+    !isActuallyAdmin && (user?.role === 'contributor' || user?.is_contributor || contribStatus)
+  );
 
   if (loading) return null;
 
@@ -105,6 +114,20 @@ export default function Navbar() {
               </Link>
             )}
 
+            <Link
+              href="/seasons"
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition
+                ${
+                  isActive("/seasons")
+                    ? "bg-slate-900/60 text-white ring-1 ring-blue-400/40"
+                    : theme === "dark"
+                    ? "text-slate-200 hover:bg-slate-900/30"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+            >
+              Seasons
+            </Link>
+
             {user && (
               <Link
                 href="/teams"
@@ -167,7 +190,23 @@ export default function Navbar() {
               </Link>
             )}
 
-            {adminStatus && user && (
+            {isActuallyContributor && user && (
+              <Link
+                href="/contributor"
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition
+                  ${
+                    isActive("/contributor")
+                      ? "bg-slate-900/60 text-white ring-1 ring-purple-400/40"
+                      : theme === "dark"
+                      ? "text-purple-300 hover:bg-slate-900/30"
+                      : "text-purple-700 hover:bg-purple-50"
+                  }`}
+              >
+                Kontribusi Soal
+              </Link>
+            )}
+
+            {isActuallyAdmin && user && (
               <Link
                 href="/admin"
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition
@@ -419,6 +458,13 @@ export default function Navbar() {
                   Activity
                 </Link>
                 <Link
+                  href="/seasons"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm text-slate-100 hover:bg-slate-900/40"
+                >
+                  Seasons
+                </Link>
+                <Link
                   href="/rules"
                   onClick={() => setMobileMenuOpen(false)}
                   className="block rounded-lg px-3 py-2 text-sm text-slate-100 hover:bg-slate-900/40"
@@ -432,7 +478,16 @@ export default function Navbar() {
                 >
                   Panduan
                 </Link>
-                {adminStatus && (
+                {isActuallyContributor && (
+                  <Link
+                    href="/contributor"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm text-purple-300 hover:bg-slate-900/40 font-medium"
+                  >
+                    Kontribusi Soal
+                  </Link>
+                )}
+                {isActuallyAdmin && (
                   <Link
                     href="/admin"
                     onClick={() => setMobileMenuOpen(false)}
@@ -463,6 +518,13 @@ export default function Navbar() {
                   className="block rounded-lg bg-slate-900/30 px-3 py-2 text-sm font-semibold text-slate-50"
                 >
                   Register
+                </Link>
+                <Link
+                  href="/seasons"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm text-slate-100 hover:bg-slate-900/40"
+                >
+                  Seasons
                 </Link>
                 <Link
                   href="/rules"

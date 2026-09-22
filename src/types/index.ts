@@ -1,3 +1,5 @@
+export type UserRole = 'admin' | 'contributor' | 'user'
+
 export interface User {
   id: string
   username: string
@@ -11,6 +13,8 @@ export interface User {
   score: number
   rank?: number
   is_admin?: boolean
+  is_contributor?: boolean
+  role?: UserRole
   created_at: string
   updated_at: string
 }
@@ -37,6 +41,9 @@ export interface Challenge {
   is_dynamic: boolean
   min_points: number
   decay_per_solve: number
+  season_id?: string | null
+  author?: string | null
+  created_by?: string | null
   created_at: string
   updated_at: string
 }
@@ -100,3 +107,54 @@ export type AppNotification = {
   link?: string
   created_at: string
 }
+
+export type SeasonStatus = 'draft' | 'active' | 'archived'
+
+export interface Season {
+  id: string
+  number: number
+  name: string
+  description?: string | null
+  status: SeasonStatus
+  started_at?: string | null
+  ended_at?: string | null
+  created_at: string
+  updated_at: string
+  challenge_count?: number
+}
+
+export interface TopPlayerArchive {
+  rank: number
+  user_id: string
+  username: string
+  score: number
+  total_solves: number
+  avatar_url?: string | null
+}
+
+export interface TopChallengeArchive {
+  id: string
+  title: string
+  category: string
+  points: number
+  solves_count: number
+  first_blood_user?: string | null
+}
+
+export interface SeasonArchive {
+  id: string
+  season_id: string
+  season_number: number
+  season_name: string
+  top_players: TopPlayerArchive[]
+  top_challenges: TopChallengeArchive[]
+  stats: {
+    total_solves: number
+    total_users: number
+    total_challenges: number
+    started_at?: string | null
+    ended_at?: string | null
+  }
+  created_at: string
+}
+

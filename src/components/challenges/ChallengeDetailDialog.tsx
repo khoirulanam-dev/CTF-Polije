@@ -8,6 +8,7 @@ import SolversList, { Solver } from './SolversList';
 import HintDialog from './HintDialog';
 import { Attachment, ChallengeWithSolve } from '@/types';
 import { getUnlockedHints } from '@/lib/challenges';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ChallengeDetailDialogProps {
   open: boolean;
@@ -46,6 +47,19 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
 }) => {
   const [copiedAll, setCopiedAll] = useState<{ [key: string]: boolean }>({});
   const [unlockedHints, setUnlockedHints] = useState<number[]>([]);
+  const { user } = useAuth();
+  const isContributorRole = user?.role === 'contributor' && !user?.is_admin;
+
+  const getAuthor = () => {
+    if (challenge?.author) return challenge.author;
+    const match = challenge?.description?.match(/Author:\s*([^\n\r]+)/i);
+    if (match) return match[1].trim();
+    return 'Mas Anam';
+  };
+  const authorName = getAuthor();
+  const cleanDescription = challenge?.description
+    ? challenge.description.replace(/^Author:\s*[^\n\r]+[\r\n]*/i, '').trim()
+    : '';
 
   React.useEffect(() => {
     if (open && challenge?.id) {
@@ -93,7 +107,7 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
           <>
             {/* Description for accessibility (DialogDescription) */}
             <DialogDescription asChild>
-              <div className="sr-only">{challenge.description}</div>
+              <div className="sr-only">{cleanDescription || challenge.description}</div>
             </DialogDescription>
             {/* Badge bar */}
             <div className="flex items-center justify-between">
@@ -111,9 +125,15 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
               </span>
             </div>
 
+            {/* Author bar */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#181829] dark:bg-gray-800 border border-[#35355e] dark:border-gray-700 text-xs">
+              <span className="text-pink-400 dark:text-pink-300 font-bold">Author:</span>
+              <span className="text-slate-200 dark:text-slate-200">@{authorName}</span>
+            </div>
+
             {/* Description */}
             <div className="max-w-full overflow-x-auto break-words">
-              <MarkdownRenderer content={challenge.description} className="max-w-full break-words" />
+              <MarkdownRenderer content={cleanDescription} className="max-w-full break-words" />
             </div>
 
             {/* Attachments */}
@@ -243,30 +263,47 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
                 })}
               </div>
             )}
-            {/* Flag input */}
-            <form
-              className="flex gap-2"
-              onSubmit={e => {
-                e.preventDefault();
-                handleFlagSubmit(challenge.id);
-              }}
-            >
-              <input
-                type="text"
-                value={flagInputs[challenge.id] || ''}
-                onChange={e => handleFlagInputChange(challenge.id, e.target.value)}
-                placeholder="Flag"
-                className="flex-1 px-3 py-2 rounded border border-[#35355e] dark:border-gray-700 bg-[#181829] dark:bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
-                autoFocus
-              />
-              <button
-                type="submit"
-                disabled={submitting[challenge.id] || !flagInputs[challenge.id]?.trim()}
-                className="px-5 py-2 rounded bg-gradient-to-br from-pink-500 to-pink-400 text-white font-bold shadow hover:from-pink-400 hover:to-pink-500 transition disabled:opacity-50"
+            {/* Flag input / Contributor restriction */}
+            {isContributorRole ? (
+              <div className="p-3.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-center gap-2.5">
+                <span className="text-base">🔒</span>
+                <span>Role Kontributor: Akun kontributor hanya untuk membuat soal dan tidak dapat melakukan submit flag.</span>
+              </div>
+            ) : (
+              <form
+                className="space-y-1.5"
+                onSubmit={e => {
+                  e.preventDefault();
+                  const val = (flagInputs[challenge.id] || '').trim();
+                  if (!/^POLIJE\{[ -~]+\}$/.test(val)) {
+                    toast.error('Format flag tidak valid! Format wajib: POLIJE{.......}');
+                    return;
+                  }
+                  handleFlagSubmit(challenge.id);
+                }}
               >
-                {submitting[challenge.id] ? '...' : 'Submit'}
-              </button>
-            </form>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={flagInputs[challenge.id] || ''}
+                    onChange={e => handleFlagInputChange(challenge.id, e.target.value)}
+                    placeholder="POLIJE{.......}"
+                    className="flex-1 px-3 py-2 rounded border border-[#35355e] dark:border-gray-700 bg-[#181829] dark:bg-gray-800 text-white font-mono text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-400"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={submitting[challenge.id] || !flagInputs[challenge.id]?.trim()}
+                    className="px-5 py-2 rounded bg-gradient-to-br from-pink-500 to-pink-400 text-white font-bold shadow hover:from-pink-400 hover:to-pink-500 transition disabled:opacity-50"
+                  >
+                    {submitting[challenge.id] ? '...' : 'Submit'}
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-400 font-mono">
+                  Format Flag: <span className="text-pink-400 font-semibold">POLIJE&#123;.......&#125;</span>
+                </p>
+              </form>
+            )}
 
             {/* Feedback box */}
             {flagFeedback[challenge.id] && (

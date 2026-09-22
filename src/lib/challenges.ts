@@ -10,6 +10,8 @@ export async function getUserRank(username: string): Promise<number | null> {
   return idx !== -1 ? idx + 1 : null;
 }
 import { supabase } from './supabase'
+import { getActiveSeason } from './seasons'
+import { isAdmin, getUserRole, getCurrentUser } from './auth'
 import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment, Announcement, AppNotification } from '@/types'
 
 /**
@@ -17,7 +19,8 @@ import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment, Announceme
  */
 export async function getChallenges(
   userId?: string,
-  showAll: boolean = false
+  showAll: boolean = false,
+  seasonId?: string
 ): Promise<(ChallengeWithSolve & { has_first_blood: boolean; is_new: boolean })[]> {
   try {
     // 🔹 Siapkan query challenge list
@@ -27,7 +30,29 @@ export async function getChallenges(
       .order('points', { ascending: true })        // poin terendah dulu
       .order('total_solves', { ascending: false }); // jika poin sama, paling banyak solves dulu
 
-    if (!showAll) query = query.eq('is_active', true);
+    if (!showAll) {
+      query = query.eq('is_active', true);
+      if (seasonId) {
+        // Jangan kembalikan soal jika season berstatus draft
+        const { data: sCheck } = await supabase
+          .from('seasons')
+          .select('status')
+          .eq('id', seasonId)
+          .maybeSingle();
+
+        if (sCheck && sCheck.status === 'draft') {
+          return [];
+        }
+
+        query = query.eq('season_id', seasonId);
+      }
+    } else if (seasonId && seasonId !== 'all') {
+      if (seasonId === 'unassigned') {
+        query = query.is('season_id', null);
+      } else {
+        query = query.eq('season_id', seasonId);
+      }
+    }
 
     // 🔹 Siapkan query solved user jika ada userId
     const solvesQuery = userId
@@ -74,9 +99,50 @@ export async function getChallenges(
  * Submit flag for a challenge
  */
 export async function submitFlag(challengeId: string, flag: string) {
+  try {
+    // 1. Validasi format Flag POLIJE{.......}
+    const cleanFlag = (flag || '').trim();
+    const flagPattern = /^POLIJE\{[ -~]+\}$/;
+    if (!flagPattern.test(cleanFlag)) {
+      return {
+        success: false,
+        message: 'Format flag tidak valid! Format wajib menggunakan: POLIJE{.......}',
+      };
+    }
+
+    // 2. Cek apakah user adalah kontributor
+    const userRole = await getUserRole();
+    if (userRole === 'contributor') {
+      return {
+        success: false,
+        message: 'Akun kontributor soal dibatasi hanya untuk membuat soal dan tidak dapat melakukan submit flag.',
+      };
+    }
+
+    // 3. Cek apakah tantangan ini terikat pada season yang berstatus draft / belum dibuka
+    const { data: chall } = await supabase
+      .from('challenges')
+      .select('id, season_id, seasons(id, number, name, status)')
+      .eq('id', challengeId)
+      .maybeSingle();
+
+    const season = (chall as any)?.seasons;
+    if (season && season.status === 'draft') {
+      const admin = await isAdmin();
+      if (!admin) {
+        return {
+          success: false,
+          message: `Musim ${season.name || ''} belum resmi dimulai. Flag belum dapat dikirimkan oleh peserta.`,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Error checking season draft status on flag submission:', err);
+  }
+
   const { data, error } = await supabase.rpc('submit_flag', {
-    challenge_id: challengeId,   // ⬅️ ganti nama
-    flag: flag,                  // ⬅️ ganti nama
+    challenge_id: challengeId,
+    flag: flag,
   });
 
   if (error) {
@@ -104,6 +170,10 @@ export async function addChallenge(challengeData: {
   is_dynamic?: boolean
   min_points?: number
   decay_per_solve?: number
+  season_id?: string | null
+  is_active?: boolean
+  author?: string | null
+  created_by?: string | null
 }): Promise<void> {
   try {
     let hintValue: any = null;
@@ -129,6 +199,39 @@ export async function addChallenge(challengeData: {
     if (error) {
       throw new Error(error.message)
     }
+
+    if (challengeData.season_id !== undefined || challengeData.is_active !== undefined || challengeData.author || challengeData.created_by) {
+      const { data: latest } = await supabase
+        .from('challenges')
+        .select('id')
+        .eq('title', challengeData.title)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (latest?.id) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const token = session?.access_token || ''
+          await fetch('/api/admin/challenges/season', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              challengeId: latest.id,
+              seasonId: challengeData.season_id,
+              isActive: challengeData.is_active,
+              author: challengeData.author,
+              createdBy: challengeData.created_by,
+            }),
+          })
+        } catch (apiErr) {
+          console.warn('Could not update challenge season via API:', apiErr)
+        }
+      }
+    }
   } catch (error) {
     console.error('Error adding challenge:', error)
     throw error
@@ -152,6 +255,9 @@ export async function updateChallenge(challengeId: string, challengeData: {
   is_dynamic?: boolean
   min_points?: number
   decay_per_solve?: number
+  season_id?: string | null
+  author?: string | null
+  created_by?: string | null
 }): Promise<void> {
   try {
     let hintValue: any = null;
@@ -178,6 +284,29 @@ export async function updateChallenge(challengeId: string, challengeData: {
     });
     if (error) {
       throw new Error(error.message)
+    }
+
+    if (challengeData.season_id !== undefined || challengeData.is_active !== undefined || challengeData.author || challengeData.created_by) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token || ''
+        await fetch('/api/admin/challenges/season', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            challengeId,
+            seasonId: challengeData.season_id,
+            isActive: challengeData.is_active,
+            author: challengeData.author,
+            createdBy: challengeData.created_by,
+          }),
+        })
+      } catch (apiErr) {
+        console.warn('Could not update challenge season via API:', apiErr)
+      }
     }
   } catch (error) {
     console.error('Error updating challenge:', error)
@@ -559,9 +688,10 @@ export async function getAnnouncements(limit = 20): Promise<Announcement[]> {
  * Get unified notifications (announcements, new challenges, and first bloods)
  */
 export async function getCombinedNotifications(limit = 100): Promise<AppNotification[]> {
-  const [announcementsRes, notifsRes] = await Promise.allSettled([
+  const [announcementsRes, notifsRes, activeSeasonRes] = await Promise.allSettled([
     getAnnouncements(limit),
     getNotifications(limit, 0),
+    getActiveSeason(),
   ]);
 
   const list: AppNotification[] = [];
@@ -581,9 +711,46 @@ export async function getCombinedNotifications(limit = 100): Promise<AppNotifica
     }
   }
 
-  // Add challenge notifications
-  if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value)) {
-    for (const n of notifsRes.value) {
+  // Add challenge notifications (KHUSUS season yang sedang aktif & soal berstatus active)
+  if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value) && notifsRes.value.length > 0) {
+    const activeSeasonId =
+      activeSeasonRes.status === 'fulfilled' && activeSeasonRes.value ? activeSeasonRes.value.id : null;
+
+    const rawNotifs = notifsRes.value;
+    const challengeIds = Array.from(
+      new Set(
+        rawNotifs
+          .map((n: any) => n.notif_challenge_id)
+          .filter(Boolean)
+      )
+    );
+
+    let allowedIds = new Set<string>();
+    if (challengeIds.length > 0) {
+      try {
+        let q = supabase
+          .from('challenges')
+          .select('id, season_id, is_active')
+          .in('id', challengeIds)
+          .eq('is_active', true);
+
+        if (activeSeasonId) {
+          q = q.eq('season_id', activeSeasonId);
+        }
+
+        const { data: validChalls } = await q;
+        allowedIds = new Set((validChalls || []).map((c: any) => c.id));
+      } catch (err) {
+        console.warn('Failed to filter notifications by active season:', err);
+      }
+    }
+
+    for (const n of rawNotifs) {
+      // Lewati jika tantangan berasal dari season draft / bukan season aktif
+      if (!allowedIds.has(n.notif_challenge_id)) {
+        continue;
+      }
+
       if (n.notif_type === 'new_challenge') {
         list.push({
           id: `new_chall-${n.notif_challenge_id}-${n.notif_created_at}`,

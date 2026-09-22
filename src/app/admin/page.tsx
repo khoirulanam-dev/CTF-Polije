@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, ChevronDown } from 'lucide-react'
 import ChallengeListItem from '@/components/admin/ChallengeListItem'
 import ChallengeOverviewCard from '@/components/admin/ChallengeOverviewCard'
 import RecentSolversList from '@/components/admin/RecentSolversList'
@@ -31,6 +31,20 @@ export default function AdminPage() {
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [solvers, setSolvers] = useState<any[]>([])
   const [siteInfo, setSiteInfo] = useState<any | null>(null)
+  const [seasons, setSeasons] = useState<any[]>([])
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('all')
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false)
+  const seasonDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (seasonDropdownRef.current && !seasonDropdownRef.current.contains(event.target as Node)) {
+        setSeasonDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Dialog / form state
   const [openForm, setOpenForm] = useState(false)
@@ -63,6 +77,7 @@ export default function AdminPage() {
     is_dynamic: false,
     min_points: 0,
     decay_per_solve: 0,
+    season_id: null as string | null,
   }
 
   const [filters, setFilters] = useState({
@@ -103,12 +118,46 @@ export default function AdminPage() {
         return
       }
 
+      // Check URL query for season filter
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        const seasonParam = params.get('season')
+        if (seasonParam) {
+          setSelectedSeasonId(seasonParam)
+        }
+      }
+
       const data = await getChallenges(undefined, true)
       const info = await getInfo()
       fetchSolvers(0)
       if (!mounted) return
       setChallenges(data)
       setSiteInfo(info)
+
+      // Fetch seasons list
+      try {
+        const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
+        const token = session?.access_token || ''
+        const res = await fetch('/api/admin/seasons', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const sData = await res.json()
+        if (mounted && sData.seasons) {
+          setSeasons(sData.seasons)
+
+          // Otomatis arahkan ke season yang sedang aktif (LIVE) jika tidak ada filter manual di URL
+          const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+          const seasonParam = params?.get('season')
+          if (!seasonParam) {
+            const activeSeason = sData.seasons.find((s: any) => s.status === 'active')
+            if (activeSeason) {
+              setSelectedSeasonId(activeSeason.id)
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load seasons:', err)
+      }
     })()
 
     return () => { mounted = false }
@@ -116,7 +165,10 @@ export default function AdminPage() {
 
   const openAdd = () => {
     setEditing(null)
-    setFormData({ ...emptyForm })
+    const defaultSeason = selectedSeasonId !== 'all' && selectedSeasonId !== 'unassigned'
+      ? selectedSeasonId
+      : (seasons.find(s => s.status === 'active')?.id || null)
+    setFormData({ ...emptyForm, season_id: defaultSeason })
     setOpenForm(true)
     setShowPreview(false)
   }
@@ -149,6 +201,7 @@ export default function AdminPage() {
       is_dynamic: c.is_dynamic ?? false,
       min_points: c.min_points ?? 0,
       decay_per_solve: c.decay_per_solve ?? 0,
+      season_id: (c as any).season_id || null,
     })
     setOpenForm(true)
     setShowPreview(false)
@@ -274,11 +327,22 @@ export default function AdminPage() {
         difficulty: (formData.difficulty || '').trim(),
         attachments: (formData.attachments || []).filter((a) => (a.url || '').trim() !== ''),
   }
-  if (typeof formData.is_dynamic !== 'undefined') payload.is_dynamic = formData.is_dynamic;
-  if (typeof formData.min_points !== 'undefined') payload.min_points = Number(formData.min_points) || 0;
-  if (typeof formData.decay_per_solve !== 'undefined') payload.decay_per_solve = Number(formData.decay_per_solve) || 0;
+      if (typeof formData.is_dynamic !== 'undefined') payload.is_dynamic = formData.is_dynamic;
+      if (typeof formData.min_points !== 'undefined') payload.min_points = Number(formData.min_points) || 0;
+      if (typeof formData.decay_per_solve !== 'undefined') payload.decay_per_solve = Number(formData.decay_per_solve) || 0;
+      payload.season_id = formData.season_id || null;
+      payload.author = user?.username || 'Admin';
+      payload.created_by = user?.id;
 
-      if ((formData.flag || '').trim()) payload.flag = formData.flag.trim()
+      if ((formData.flag || '').trim()) {
+        const flagVal = formData.flag.trim()
+        if (!/^POLIJE\{[ -~]+\}$/.test(flagVal)) {
+          toast.error('Format flag wajib mengikuti: POLIJE{.......}')
+          setSubmitting(false)
+          return
+        }
+        payload.flag = flagVal
+      }
 
       if (formData.is_dynamic) {
         payload.max_points = Number(formData.max_points) || Number(formData.points) || 0;
@@ -291,7 +355,6 @@ export default function AdminPage() {
           setSubmitting(false)
           return
         }
-        payload.flag = formData.flag.trim()
         await addChallenge(payload)
       }
 
@@ -322,6 +385,13 @@ export default function AdminPage() {
   }
 
   const filteredChallenges = challenges.filter((c) => {
+    if (selectedSeasonId !== 'all') {
+      if (selectedSeasonId === 'unassigned') {
+        if ((c as any).season_id) return false
+      } else {
+        if ((c as any).season_id !== selectedSeasonId) return false
+      }
+    }
     if (filters.search && !c.title.toLowerCase().includes(filters.search.toLowerCase())) return false
     if (filters.category !== "all" && c.category !== filters.category) return false
     if (filters.difficulty !== "all" && c.difficulty !== filters.difficulty) return false
@@ -354,15 +424,178 @@ export default function AdminPage() {
           >
             <Card className="h-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+                <CardTitle className="flex items-center justify-between flex-wrap gap-2">
                   <span>Challenge List</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      className="border-blue-500/40 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 font-semibold flex items-center gap-1.5"
+                      onClick={() => router.push('/admin/seasons')}
+                    >
+                      ⚡ Seasons
+                    </Button>
                     <Button variant="outline" onClick={() => router.push('/admin/event')}>Event Mode</Button>
                     <Button onClick={openAdd}>+ Add Challenge</Button>
                   </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {seasons.length > 0 && (
+                  <div className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-gray-100 dark:border-gray-700/60 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Musim:</span>
+
+                      {/* Tab Mandiri: Semua Soal */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSeasonId('all');
+                          setSeasonDropdownOpen(false);
+                        }}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition shrink-0 cursor-pointer ${
+                          selectedSeasonId === 'all'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        Semua Soal ({challenges.length})
+                      </button>
+
+                      {/* Dropdown Khusus Season */}
+                      <div className="relative" ref={seasonDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => setSeasonDropdownOpen((prev) => !prev)}
+                          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                            selectedSeasonId !== 'all'
+                              ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500/60 text-blue-700 dark:text-blue-300 shadow-xs'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                          }`}
+                        >
+                          {selectedSeasonId !== 'all' && (
+                            <span className="relative flex h-2 w-2">
+                              <span
+                                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                                  seasons.find((s: any) => s.id === selectedSeasonId)?.status === 'active'
+                                    ? 'bg-emerald-400'
+                                    : seasons.find((s: any) => s.id === selectedSeasonId)?.status === 'draft'
+                                    ? 'bg-amber-400'
+                                    : 'bg-gray-400'
+                                }`}
+                              />
+                              <span
+                                className={`relative inline-flex rounded-full h-2 w-2 ${
+                                  seasons.find((s: any) => s.id === selectedSeasonId)?.status === 'active'
+                                    ? 'bg-emerald-500'
+                                    : seasons.find((s: any) => s.id === selectedSeasonId)?.status === 'draft'
+                                    ? 'bg-amber-500'
+                                    : 'bg-gray-500'
+                                }`}
+                              />
+                            </span>
+                          )}
+
+                          <span>
+                            {selectedSeasonId !== 'all'
+                              ? (() => {
+                                  const s = seasons.find((s: any) => s.id === selectedSeasonId);
+                                  return s ? `Season #${s.number}: ${s.name}` : 'Pilih Season';
+                                })()
+                              : 'Pilih Season'}
+                          </span>
+
+                          {selectedSeasonId !== 'all' && (() => {
+                            const s = seasons.find((s: any) => s.id === selectedSeasonId);
+                            if (!s) return null;
+                            if (s.status === 'active') {
+                              return (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                                  LIVE
+                                </span>
+                              );
+                            }
+                            if (s.status === 'draft') {
+                              return (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30">
+                                  DRAFT
+                                </span>
+                              );
+                            }
+                            if (s.status === 'archived') {
+                              return (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium">
+                                  ARSIP
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+
+                          <ChevronDown
+                            size={14}
+                            className={`text-gray-400 transition-transform duration-200 ${
+                              seasonDropdownOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+
+                        {/* Dropdown Popover (Hanya Season) */}
+                        {seasonDropdownOpen && (
+                          <div className="absolute top-full left-0 mt-1.5 z-50 w-72 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl p-1.5 space-y-1 animate-in fade-in duration-150">
+                            <div className="px-3 py-1.5 text-[11px] font-bold tracking-wider text-gray-400 uppercase">
+                              Pilih Musim
+                            </div>
+
+                            {seasons.map((s: any) => {
+                              const count = challenges.filter(c => (c as any).season_id === s.id).length;
+                              const isSelected = selectedSeasonId === s.id;
+
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSeasonId(s.id);
+                                    setSeasonDropdownOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold'
+                                      : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span>Season #{s.number}: {s.name}</span>
+                                    {s.status === 'active' && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold">
+                                        LIVE
+                                      </span>
+                                    )}
+                                    {s.status === 'draft' && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">
+                                        DRAFT
+                                      </span>
+                                    )}
+                                    {s.status === 'archived' && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 font-medium">
+                                        ARSIP
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-gray-400 font-mono text-[11px]">({count})</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Menampilkan <strong className="text-gray-900 dark:text-white font-semibold">{filteredChallenges.length}</strong> dari {challenges.length} soal
+                    </div>
+                  </div>
+                )}
                 <div className="mb-4">
                   {/* Kategori terurut dari config, jika ada */}
                   {(() => {
@@ -495,6 +728,7 @@ export default function AdminPage() {
             onRemoveAttachment={removeAttachment}
             setShowPreview={setShowPreview}
             categories={APP.challengeCategories || []}
+            seasons={seasons}
           />
         )}
       </AnimatePresence>
