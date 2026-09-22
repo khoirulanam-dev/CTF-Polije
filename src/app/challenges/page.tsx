@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 
@@ -394,6 +395,13 @@ export default function ChallengesPage() {
           <TitlePage>🚩 challenges</TitlePage>
 
           <div className="flex gap-2.5 items-center flex-wrap">
+            <Link
+              href="/panduan"
+              className="rounded-2xl bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 px-3.5 py-1.5 text-xs sm:text-sm text-blue-400 font-medium shadow-xs transition flex items-center gap-1.5"
+              title="Buka Buku Panduan Bermain CTF"
+            >
+              <span>📖</span> Panduan CTF
+            </Link>
             <ReducedMotionToggle />
             <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 shadow-xs">
               Total chall:{" "}
