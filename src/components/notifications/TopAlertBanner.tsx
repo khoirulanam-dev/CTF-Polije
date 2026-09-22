@@ -73,16 +73,17 @@ export default function TopAlertBanner() {
 
   return (
     <AnimatePresence>
-      <motion.div
-        key={activeAlert.id}
-        initial={{ opacity: 0, y: -25, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -20, scale: 0.96 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-lg w-[94%] sm:w-full overflow-hidden rounded-2xl bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-cyan-500/40 backdrop-blur-xl shadow-xl dark:shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
-      >
+      <div className="fixed inset-x-0 top-16 z-50 flex justify-center px-3 sm:px-4 pointer-events-none">
+        <motion.div
+          key={activeAlert.id}
+          initial={{ opacity: 0, y: -25, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -20, scale: 0.96 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          className="pointer-events-auto w-full max-w-lg overflow-hidden rounded-2xl bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-cyan-500/40 backdrop-blur-xl shadow-xl dark:shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+        >
         <div className="p-3.5 sm:p-4 flex items-start gap-3">
           {/* Pulsing Icon */}
           <div className="shrink-0 mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-cyan-500/10 border border-blue-200 dark:border-cyan-500/30 text-lg shadow-xs">
@@ -165,7 +166,8 @@ export default function TopAlertBanner() {
             style={{ width: `${progress}%` }}
           />
         </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </AnimatePresence>
   );
 }

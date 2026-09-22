@@ -51,7 +51,7 @@ export default function NotificationList() {
     );
 
   return (
-    <ul className="space-y-3">
+    <ul className="w-full min-w-0 space-y-3">
       {notifications.map((notif, idx) => {
         const isFeature = notif.notif_type === "feature_update";
         const isSystem = notif.notif_type === "system_update";
@@ -61,7 +61,7 @@ export default function NotificationList() {
         return (
           <motion.li
             key={notif.id || idx}
-            className={`border rounded-2xl p-4 shadow-sm transition-all duration-200 ${
+            className={`min-w-0 border rounded-2xl p-4 shadow-sm transition-all duration-200 ${
               isFeature
                 ? "bg-cyan-50/70 border-cyan-200 hover:bg-cyan-50 hover:border-cyan-300 dark:bg-cyan-950/20 dark:border-cyan-500/30 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-950/30"
                 : isNewChall
@@ -119,13 +119,13 @@ export default function NotificationList() {
                 </div>
 
                 {/* Title */}
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide mt-1">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide mt-1 break-words">
                   {notif.title}
                 </h3>
 
                 {/* Description or details */}
                 {notif.description && (
-                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed break-words">
                     {notif.description}
                   </p>
                 )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback, Fragment } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePresence } from "@/contexts/PresenceContext";
 import { supabase } from "@/lib/supabase";
 import {
   fetchMessages,
@@ -27,14 +28,6 @@ import clsx from "clsx";
 import ImageWithFallback from "@/components/ImageWithFallback";
 
 type Msg = ChatMessage;
-
-type PresenceUser = {
-  id: string;
-  name: string;
-  role: "user" | "admin";
-  typing?: boolean;
-  lastTypingAt?: number;
-};
 
 type ReactionAgg = {
   emoji: string;
@@ -132,6 +125,10 @@ function getMessageDateGroup(isoString: string): string {
 
 export default function LiveChatWidget() {
   const { user: authUser, loading: authLoading } = useAuth();
+  const {
+    onlineCount: platformOnlineCount,
+    isUserOnline: isPlatformUserOnline,
+  } = usePresence();
 
   // ---------- state ----------
   const [open, setOpen] = useState(false);
@@ -156,7 +153,6 @@ export default function LiveChatWidget() {
     "User";
   const activeIsAdmin = isAdmin || !!authUser?.is_admin;
 
-  const [onlineMap, setOnlineMap] = useState<Record<string, PresenceUser>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
 
   const [notice, setNotice] = useState<string | null>(null);
@@ -263,8 +259,6 @@ export default function LiveChatWidget() {
   }
 
   // ---------- derived ----------
-  const onlineCount = useMemo(() => Object.keys(onlineMap).length, [onlineMap]);
-
   const typingLine = useMemo(() => {
     const names = Object.values(typingUsers);
     if (names.length === 0) return "";
@@ -278,7 +272,7 @@ export default function LiveChatWidget() {
 
   // helper online check (presence realtime)
   function isUserOnline(uid: string) {
-    return !!onlineMap[uid];
+    return isPlatformUserOnline(uid);
   }
 
   // Sync from AuthContext
@@ -698,24 +692,12 @@ export default function LiveChatWidget() {
 
     presence.on("presence", { event: "sync" }, () => {
       const state = presence.presenceState() as Record<string, any[]>;
-      const map: Record<string, PresenceUser> = {};
-
-      Object.keys(state).forEach((uid) => {
-        const latest = state[uid][state[uid].length - 1];
-        map[uid] = {
-          id: uid,
-          name: latest?.name || "User",
-          role: latest?.role || "user",
-          typing: !!latest?.typing,
-          lastTypingAt: latest?.lastTypingAt || 0,
-        };
-      });
-
-      setOnlineMap(map);
-
       const tmap: Record<string, string> = {};
-      Object.values(map).forEach((u) => {
-        if (u.typing && u.id !== activeUserId) tmap[u.id] = u.name;
+      Object.entries(state).forEach(([uid, presences]) => {
+        const latest = presences[presences.length - 1];
+        if (latest?.typing && uid !== activeUserId) {
+          tmap[uid] = latest.name || "User";
+        }
       });
       setTypingUsers(tmap);
     });
@@ -729,11 +711,6 @@ export default function LiveChatWidget() {
         if (typing) next[uid] = uname || "User";
         else delete next[uid];
         return next;
-      });
-
-      setOnlineMap((prev) => {
-        if (!prev[uid]) return prev;
-        return { ...prev, [uid]: { ...prev[uid], typing: !!typing } };
       });
     });
 
@@ -1111,7 +1088,7 @@ export default function LiveChatWidget() {
             Polije Live Chat
             <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300 ring-1 ring-emerald-400/30">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Online {onlineCount}
+              Online {platformOnlineCount}
             </span>
           </div>
           <div className="flex items-center gap-1">
