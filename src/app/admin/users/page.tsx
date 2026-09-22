@@ -250,7 +250,7 @@ export default function AdminUsersPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) throw new Error('Sesi login tidak ditemukan.')
 
-      const response = await fetch(`/api/admin/users?id=${encodeURIComponent(managedUser.id)}`, {
+      const response = await fetch(`/api/admin/users?id=${encodeURIComponent(target.id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
