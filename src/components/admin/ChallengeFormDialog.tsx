@@ -346,7 +346,7 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
               </div>
               {formData.flag && !/^POLIJE\{[ -~]+\}$/.test(formData.flag.trim()) && (
                 <p className="text-xs text-red-500 mt-1 font-mono">
-                  ⚠ Format flag tidak sesuai! Flag harus diawali "POLIJE&#123;" dan diakhiri "&#125;".
+                  ⚠ Format flag tidak sesuai! Flag harus diawali &quot;POLIJE&#123;&quot; dan diakhiri &quot;&#125;&quot;.
                 </p>
               )}
             </div>

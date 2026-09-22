@@ -367,7 +367,7 @@ export default function AdminSeasonsPage() {
                 <strong className="text-slate-200">Isi Soal di Menu Admin</strong>: Tambahkan soal-soal baru dan tautkan ke Season 2. Soal berstatus draft <em>tidak akan tampil ke user</em>.
               </li>
               <li>
-                <strong className="text-slate-200">Klik "Up Season Ini"</strong>: Season 1 akan otomatis diarsipkan bersama snapshot Top Player, dan Season 2 langsung live!
+                <strong className="text-slate-200">Klik &quot;Up Season Ini&quot;</strong>: Season 1 akan otomatis diarsipkan bersama snapshot Top Player, dan Season 2 langsung live!
               </li>
             </ol>
           </Card>
