@@ -2,10 +2,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
+import { ArrowLeft } from "lucide-react"
 
 type Props = {
-  href?: string // optional: if you want to force redirect to a specific path
+  href?: string
   label?: string
   onClick?: () => void
   className?: string
@@ -25,12 +25,14 @@ export default function BackButton({ href, label = "Back", onClick, className = 
   }
 
   return (
-    <Button
+    <button
+      type="button"
       onClick={handleClick}
-      variant="ghost"
-      className={`flex items-center gap-2 text-gray-700 dark:text-gray-200 ${className}`}
+      className={`group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/80 hover:bg-slate-100 dark:bg-slate-900/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 shadow-xs transition-all duration-150 ${className}`}
     >
-      ← {label}
-    </Button>
+      <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
+      <span>{label}</span>
+    </button>
   )
 }
+

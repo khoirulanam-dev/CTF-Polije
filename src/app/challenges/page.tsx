@@ -20,6 +20,7 @@ import ChallengeFilterBar from "@/components/challenges/ChallengeFilterBar";
 import APP from "@/config";
 import { useAuth } from "@/contexts/AuthContext";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
+import { usePresence } from "@/contexts/PresenceContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 
 // Helper untuk normalisasi field hint
@@ -65,6 +66,7 @@ export default function ChallengesPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const { reducedMotion } = useReducedMotion();
+  const { onlineCount, totalUsers } = usePresence();
 
   const [challengeTab, setChallengeTab] = useState<"challenge" | "solvers">(
     "challenge"
@@ -391,15 +393,31 @@ export default function ChallengesPage() {
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <TitlePage>🚩 challenges</TitlePage>
 
-          <div className="flex gap-3 items-center">
+          <div className="flex gap-2.5 items-center flex-wrap">
             <ReducedMotionToggle />
-            <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-4 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm">
+            <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 shadow-xs">
               Total chall:{" "}
-              <span className="font-semibold">{challenges.length}</span>
+              <span className="font-bold text-slate-900 dark:text-white">{challenges.length}</span>
             </div>
-            <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-4 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm">
+            <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 shadow-xs">
               Solved:{" "}
-              <span className="font-semibold">{solvedCount}</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">{solvedCount}</span>
+            </div>
+            <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 shadow-xs flex items-center gap-1.5">
+              <span className="text-slate-400">👥</span> Users:{" "}
+              <span className="font-bold text-slate-900 dark:text-white">
+                {totalUsers > 0 ? totalUsers : "-"}
+              </span>
+            </div>
+            <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/70 px-3.5 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 shadow-xs flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Online:{" "}
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {onlineCount}
+              </span>
             </div>
           </div>
         </div>

@@ -129,6 +129,7 @@ export const metadata: Metadata = {
   },
 };
 
+import { PresenceProvider } from "@/contexts/PresenceContext";
 import TopAlertBanner from "@/components/notifications/TopAlertBanner";
 
 export default function RootLayout({
@@ -141,17 +142,19 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider>
           <AuthProvider>
-            <NotificationsProvider>
-              <ReducedMotionProvider>
-                <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-                  <Navbar />
-                  <TopAlertBanner />
-                  <div className="pt-14">{children}</div>
-                  <Toaster position="top-right" reverseOrder={false} />
-                  <Analytics />
-                </div>
-              </ReducedMotionProvider>
-            </NotificationsProvider>
+            <PresenceProvider>
+              <NotificationsProvider>
+                <ReducedMotionProvider>
+                  <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+                    <Navbar />
+                    <TopAlertBanner />
+                    <div className="pt-14">{children}</div>
+                    <Toaster position="top-right" reverseOrder={false} />
+                    <Analytics />
+                  </div>
+                </ReducedMotionProvider>
+              </NotificationsProvider>
+            </PresenceProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

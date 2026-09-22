@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Fragment } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -21,6 +21,7 @@ import {
   Paperclip,
   Mic,
   StopCircle,
+  Search,
 } from "lucide-react";
 import clsx from "clsx";
 import ImageWithFallback from "@/components/ImageWithFallback";
@@ -63,6 +64,72 @@ const MAX_LEN = 500;
 const EMOJIS = ["😂", "😮", "🔥", "❤️", "👍", "👎", "🎉", "🤯", "😡", "😢"];
 const QUICK_REACT = ["😂", "🔥", "❤️", "👍"];
 
+function formatMessageTime(isoString: string): string {
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  const timeStr = date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (isToday) return timeStr;
+  if (isYesterday) return `Kemarin, ${timeStr}`;
+
+  if (date.getFullYear() !== now.getFullYear()) {
+    return `${date.toLocaleDateString([], {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })} • ${timeStr}`;
+  }
+
+  return `${date.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  })} • ${timeStr}`;
+}
+
+function getMessageDateGroup(isoString: string): string {
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  if (isToday) return "Hari Ini";
+  if (isYesterday) return "Kemarin";
+
+  return date.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function LiveChatWidget() {
   const { user: authUser, loading: authLoading } = useAuth();
 
@@ -71,6 +138,11 @@ export default function LiveChatWidget() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [cooldownLeft, setCooldownLeft] = useState<number>(0);
+
+  // search state
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [userId, setUserId] = useState<string | null>(authUser?.id || null);
   const [isAdmin, setIsAdmin] = useState(!!authUser?.is_admin);
@@ -286,10 +358,22 @@ export default function LiveChatWidget() {
     } catch {}
   }, [activeUserId]);
 
-  // messages visible to this user
+  // messages visible to this user (filtered by deleted & search query)
   const visibleMsgs = useMemo(() => {
-    return msgs.filter((m) => !deletedForMeIds.has(m.id));
-  }, [msgs, deletedForMeIds]);
+    const base = msgs.filter((m) => !deletedForMeIds.has(m.id));
+    if (!searchQuery.trim()) return base;
+    const q = searchQuery.toLowerCase().trim();
+    return base.filter((m) => {
+      const contentMatch = m.content && m.content.toLowerCase().includes(q);
+      const senderMatch =
+        (m.sender_name && m.sender_name.toLowerCase().includes(q)) ||
+        (userProfiles[m.sender_id]?.username &&
+          userProfiles[m.sender_id].username.toLowerCase().includes(q));
+      const attachMatch =
+        m.attachment_name && m.attachment_name.toLowerCase().includes(q);
+      return contentMatch || senderMatch || attachMatch;
+    });
+  }, [msgs, deletedForMeIds, searchQuery, userProfiles]);
 
   // Helper untuk mengambil avatar & username user yang belum ada di cache
   const fetchMissingUserProfiles = useCallback((ids: string[]) => {
@@ -1030,13 +1114,69 @@ export default function LiveChatWidget() {
               Online {onlineCount}
             </span>
           </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="text-white/70 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setSearchOpen((prev) => {
+                  const next = !prev;
+                  if (!next) setSearchQuery("");
+                  else setTimeout(() => searchInputRef.current?.focus(), 100);
+                  return next;
+                });
+              }}
+              className={clsx(
+                "rounded-lg p-1.5 transition-colors cursor-pointer",
+                searchOpen
+                  ? "bg-purple-500/20 text-purple-300"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              )}
+              title={searchOpen ? "Tutup pencarian" : "Cari pesan"}
+            >
+              <Search className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Tutup chat"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Search Bar */}
+        {searchOpen && (
+          <div className="flex items-center gap-2 border-b border-white/10 bg-zinc-900/95 px-3 py-2 animate-in slide-in-from-top-2 duration-150">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari pesan atau nama user..."
+                className="w-full rounded-xl bg-white/10 pl-8 pr-7 py-1.5 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-purple-500/60"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs cursor-pointer"
+                  title="Hapus pencarian"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {searchQuery.trim() && (
+              <span className="text-[10px] text-white/50 shrink-0 font-mono">
+                {visibleMsgs.length} hasil
+              </span>
+            )}
+          </div>
+        )}
 
         {notice && (
           <div className="px-3 pt-2">
@@ -1215,7 +1355,22 @@ export default function LiveChatWidget() {
             "bg-[radial-gradient(ellipse_at_top,_rgba(168,85,247,0.10)_0%,_transparent_60%),radial-gradient(ellipse_at_bottom,_rgba(59,130,246,0.10)_0%,_transparent_60%),linear-gradient(180deg,_rgba(0,0,0,0.9)_0%,_rgba(0,0,0,0.7)_100%)]"
           )}
         >
-          {visibleMsgs.map((m) => {
+          {searchQuery.trim() && visibleMsgs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full py-16 text-center text-white/50 space-y-2">
+              <Search className="h-8 w-8 text-white/25 mb-1" />
+              <p className="text-xs font-medium text-white/70">
+                Tidak ada pesan untuk &ldquo;{searchQuery}&rdquo;
+              </p>
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-[11px] text-purple-400 hover:underline cursor-pointer"
+              >
+                Reset pencarian
+              </button>
+            </div>
+          ) : (
+            visibleMsgs.map((m, idx) => {
             const isMine = m.sender_id === activeUserId;
             const isDeletedForEveryone =
               m.content === "__DELETED_FOR_EVERYONE__" ||
@@ -1245,14 +1400,27 @@ export default function LiveChatWidget() {
                 m.sender_id?.slice(0, 8) ||
                 "User";
 
+            const prevMsg = idx > 0 ? visibleMsgs[idx - 1] : null;
+            const showDateDivider =
+              !prevMsg ||
+              new Date(m.created_at).toDateString() !==
+                new Date(prevMsg.created_at).toDateString();
+
             return (
-              <div
-                key={m.id}
-                className={clsx(
-                  "group relative my-2 flex flex-col",
-                  isMine ? "items-end" : "items-start"
+              <Fragment key={m.id}>
+                {showDateDivider && (
+                  <div className="flex justify-center my-3">
+                    <span className="px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-medium bg-zinc-800/90 text-zinc-300 border border-white/10 shadow-xs backdrop-blur-md select-none">
+                      {getMessageDateGroup(m.created_at)}
+                    </span>
+                  </div>
                 )}
-              >
+                <div
+                  className={clsx(
+                    "group relative my-2 flex flex-col",
+                    isMine ? "items-end" : "items-start"
+                  )}
+                >
                 {/* Floating Reaction Picker (WhatsApp style - absolute floating above the bubble) */}
                 {!isDeletedForEveryone && activeReactMsgId === m.id && (
                   <div
@@ -1376,11 +1544,14 @@ export default function LiveChatWidget() {
                         </>
                       )}
 
-                      <div className="mt-1 text-[10px] opacity-60">
-                        {new Date(m.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
+                      <div
+                        className="mt-1 text-[10px] opacity-65 flex items-center gap-1 cursor-default select-none"
+                        title={new Date(m.created_at).toLocaleString("id-ID", {
+                          dateStyle: "full",
+                          timeStyle: "medium",
                         })}
+                      >
+                        <span>{formatMessageTime(m.created_at)}</span>
                       </div>
                     </div>
 
@@ -1465,9 +1636,11 @@ export default function LiveChatWidget() {
                     </button>
                   </div>
                 )}
-              </div>
+                </div>
+              </Fragment>
             );
-          })}
+          })
+        )}
 
           <div ref={bottomRef} />
         </div>

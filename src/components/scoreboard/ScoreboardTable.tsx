@@ -12,6 +12,7 @@ import {
 import { Button } from "../ui/button";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import { LeaderboardEntry } from "@/types";
+import { usePresence } from "@/contexts/PresenceContext";
 
 interface ScoreboardTableProps {
   leaderboard: LeaderboardEntry[];
@@ -23,6 +24,7 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
   currentUsername,
 }) => {
   const pathname = usePathname();
+  const { isUserOnline } = usePresence();
 
   return (
     <Card className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -117,6 +119,12 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
                           <span className="absolute -bottom-1 -right-1 text-[11px] leading-none">
                             {rankNum === 1 ? "🥇" : rankNum === 2 ? "🥈" : "🥉"}
                           </span>
+                        )}
+                        {isUserOnline(entry.id, entry.username) && (
+                          <span
+                            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"
+                            title="Online"
+                          />
                         )}
                       </div>
 

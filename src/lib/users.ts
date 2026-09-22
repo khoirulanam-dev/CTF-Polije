@@ -297,3 +297,71 @@ export async function updateProfile(
     return { error: 'Failed to update profile' }
   }
 }
+
+/**
+ * Get accurate last active timestamp for a user across all platform interactions:
+ * - Live chat messages
+ * - Challenge solves
+ * - Profile updates / heartbeats
+ */
+export async function getUserLastActive(
+  userId: string,
+  username?: string,
+  fallbackSolveAt?: string | null
+): Promise<string | null> {
+  const timestamps: number[] = [];
+
+  // 1. Solve date fallback if provided
+  if (fallbackSolveAt) {
+    const t = new Date(fallbackSolveAt).getTime();
+    if (!isNaN(t)) timestamps.push(t);
+  }
+
+  // 2. Query latest chat message sent by this user
+  try {
+    let query = supabase
+      .from("chat_messages")
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (userId && username) {
+      query = query.or(`sender_id.eq.${userId},sender_name.eq.${username}`);
+    } else if (userId) {
+      query = query.eq("sender_id", userId);
+    } else if (username) {
+      query = query.eq("sender_name", username);
+    }
+
+    const { data: chatData } = await query;
+    if (chatData && chatData.length > 0 && chatData[0].created_at) {
+      const t = new Date(chatData[0].created_at).getTime();
+      if (!isNaN(t)) timestamps.push(t);
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+
+  // 3. Query updated_at from users table
+  try {
+    const { data: userData } = await supabase
+      .from("users")
+      .select("updated_at, created_at")
+      .eq("id", userId)
+      .single();
+
+    if (userData?.updated_at) {
+      const t = new Date(userData.updated_at).getTime();
+      if (!isNaN(t)) timestamps.push(t);
+    } else if (userData?.created_at) {
+      const t = new Date(userData.created_at).getTime();
+      if (!isNaN(t)) timestamps.push(t);
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+
+  if (timestamps.length === 0) return null;
+  return new Date(Math.max(...timestamps)).toISOString();
+}
+
