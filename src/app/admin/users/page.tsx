@@ -10,12 +10,20 @@ import {
   UserPlus,
   Users,
   Wifi,
+  AlertTriangle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Loader from '@/components/custom/loading'
@@ -30,10 +38,9 @@ type ManagedUser = {
   email: string
   username: string
   role: UserRole
-  score: number
   created_at: string
   updated_at: string
-  last_sign_in_at: string | null
+  last_seen_at: string | null
 }
 
 type UserForm = {
@@ -67,6 +74,19 @@ function formatDate(value?: string | null) {
   })
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function roleClass(role: UserRole) {
   if (role === 'admin') return 'border-rose-500/30 bg-rose-500/10 text-rose-300'
   if (role === 'contributor') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
@@ -86,6 +106,8 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null)
   const [form, setForm] = useState<UserForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const loadUsers = useCallback(async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true)
@@ -212,7 +234,17 @@ export default function AdminUsersPage() {
       toast.error('Anda tidak dapat menghapus akun sendiri.')
       return
     }
-    if (!window.confirm(`Hapus user ${managedUser.username}? Tindakan ini tidak dapat dibatalkan.`)) return
+    setDeleteTarget(managedUser)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+
+    const target = deleteTarget
+    const previousUsers = users
+    setDeleteTarget(null)
+    setDeletingId(target.id)
+    setUsers((currentUsers) => currentUsers.filter((managedUser) => managedUser.id !== target.id))
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -226,9 +258,11 @@ export default function AdminUsersPage() {
       if (!response.ok) throw new Error(data.error || 'Gagal menghapus user.')
 
       toast.success('User berhasil dihapus.')
-      await loadUsers()
     } catch (error: any) {
+      setUsers(previousUsers)
       toast.error(error?.message || 'Gagal menghapus user.')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -341,15 +375,15 @@ export default function AdminUsersPage() {
               <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">User tidak ditemukan.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-sm">
+                <table className="w-full min-w-[820px] text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
                       <th className="px-3 py-3">Status</th>
                       <th className="px-3 py-3">User</th>
                       <th className="px-3 py-3">Email</th>
                       <th className="px-3 py-3">Role</th>
-                      <th className="px-3 py-3">Score</th>
                       <th className="px-3 py-3">Bergabung</th>
+                      <th className="px-3 py-3">Last seen</th>
                       <th className="px-3 py-3 text-right">Aksi</th>
                     </tr>
                   </thead>
@@ -374,14 +408,16 @@ export default function AdminUsersPage() {
                               {ROLE_LABELS[managedUser.role]}
                             </span>
                           </td>
-                          <td className="px-3 py-3 font-mono">{managedUser.score}</td>
                           <td className="px-3 py-3 text-gray-500 dark:text-gray-400">{formatDate(managedUser.created_at)}</td>
+                          <td className="px-3 py-3 text-gray-500 dark:text-gray-400">
+                            {isOnline ? 'Sekarang' : formatDateTime(managedUser.last_seen_at)}
+                          </td>
                           <td className="px-3 py-3">
                             <div className="flex justify-end gap-2">
                               <Button type="button" variant="outline" size="sm" onClick={() => openEdit(managedUser)}>
                                 <Pencil className="h-3.5 w-3.5" /> Edit
                               </Button>
-                              <Button type="button" variant="destructive" size="sm" onClick={() => handleDelete(managedUser)}>
+                              <Button type="button" variant="destructive" size="sm" onClick={() => handleDelete(managedUser)} disabled={deletingId !== null}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
@@ -460,6 +496,33 @@ export default function AdminUsersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !deletingId) setDeleteTarget(null)
+        }}
+      >
+        <DialogContent className="border-red-500/20 bg-white dark:bg-gray-900 sm:max-w-md">
+          <DialogHeader className="items-center text-center sm:items-start sm:text-left">
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-gray-900 dark:text-white">Hapus user?</DialogTitle>
+            <DialogDescription className="text-gray-500 dark:text-gray-400">
+              User <strong className="text-gray-900 dark:text-gray-200">{deleteTarget?.username}</strong> akan dihapus permanen dari sistem. Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deletingId !== null}>
+              Batal
+            </Button>
+            <Button type="button" variant="destructive" onClick={confirmDelete} disabled={deletingId !== null}>
+              {deletingId ? 'Menghapus...' : 'Ya, Hapus User'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </main>

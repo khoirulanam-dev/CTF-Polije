@@ -170,10 +170,11 @@ export async function GET(req: Request) {
           authUser.email?.split('@')[0] ||
           'User',
         role,
-        score: 0,
         created_at: profile?.created_at || authUser.created_at,
         updated_at: profile?.updated_at || authUser.updated_at || authUser.created_at,
-        last_sign_in_at: authUser.last_sign_in_at || null,
+        // Heartbeat updates public.users.updated_at, which represents the
+        // latest recorded activity for the admin user list.
+        last_seen_at: profile?.updated_at || authUser.last_sign_in_at || null,
       }
     })
 
