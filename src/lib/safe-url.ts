@@ -10,6 +10,12 @@ const SOCIAL_HOSTS: Record<Exclude<ProfileUrlKind, 'website_url'>, string[]> = {
   instagram_url: ['instagram.com', 'www.instagram.com'],
 }
 
+const GITHUB_ATTACHMENT_HOSTS = new Set([
+  'github.com',
+  'www.github.com',
+  'raw.githubusercontent.com',
+])
+
 function parseHttpsUrl(value?: string | null): URL | null {
   if (!value) return null
 
@@ -61,11 +67,21 @@ export function isAllowedAttachmentFileUrl(value?: string | null): boolean {
   const normalized = normalizeExternalHttpsUrl(value)
   if (!normalized) return false
 
-  const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!configuredSupabaseUrl) return false
-
   try {
     const attachmentUrl = new URL(normalized)
+
+    // GitHub is an approved external source for challenge files. Keep the
+    // allowlist limited to GitHub's official download/page hosts.
+    if (
+      GITHUB_ATTACHMENT_HOSTS.has(attachmentUrl.hostname.toLowerCase()) &&
+      attachmentUrl.pathname !== '/'
+    ) {
+      return true
+    }
+
+    const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!configuredSupabaseUrl) return false
+
     const supabaseUrl = new URL(configuredSupabaseUrl)
     return (
       attachmentUrl.hostname === supabaseUrl.hostname &&
@@ -101,7 +117,7 @@ export function validateAttachments(value: unknown): string | null {
       : Boolean(normalizeExternalHttpsUrl(item.url))
     if (!validUrl) {
       return item.type === 'file'
-        ? 'File attachment harus berasal dari storage Supabase proyek ini.'
+        ? 'File attachment harus berasal dari storage Supabase proyek ini atau GitHub.'
         : 'Link attachment harus menggunakan URL HTTPS yang valid.'
     }
   }
