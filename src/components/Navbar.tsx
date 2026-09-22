@@ -10,6 +10,8 @@ import { signOut, isAdmin, isContributor } from "@/lib/auth";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import APP from "@/config";
+import { getPublicSeasons } from "@/lib/seasons";
+import type { Season } from "@/types";
 
 export default function Navbar() {
   const router = useRouter();
@@ -21,6 +23,7 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [adminStatus, setAdminStatus] = useState(false);
   const [contribStatus, setContribStatus] = useState(false);
+  const [activeSeason, setActiveSeason] = useState<Season | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -31,6 +34,23 @@ export default function Navbar() {
       setContribStatus(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadActiveSeason = async () => {
+      const seasons = await getPublicSeasons();
+      if (mounted) {
+        setActiveSeason(seasons.find((season) => season.status === "active") || null);
+      }
+    };
+
+    void loadActiveSeason();
+
+    return () => {
+      mounted = false;
+    };
+  }, [pathname]);
 
   const handleLogout = async () => {
     setMobileMenuOpen(false);
@@ -70,7 +90,7 @@ export default function Navbar() {
                 {APP.shortName.charAt(0)}
               </span>
             </div>
-            <div className="leading-tight">
+            <div className="flex items-center gap-2 leading-tight">
               <p
                 className={`text-[1.1rem] font-extrabold tracking-wide ${
                   theme === "dark" ? "text-white" : "text-slate-900"
@@ -78,6 +98,19 @@ export default function Navbar() {
               >
                 {APP.shortName}
               </p>
+              {activeSeason && (
+                <span
+                  title={`${activeSeason.name} sedang aktif`}
+                  aria-label={`Season ${activeSeason.number} sedang aktif`}
+                  className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold leading-none tracking-wide ${
+                    theme === "dark"
+                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                      : "border-emerald-600/30 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  S{activeSeason.number}
+                </span>
+              )}
             </div>
           </Link>
 
@@ -199,8 +232,8 @@ export default function Navbar() {
                     isActive("/contributor")
                       ? "bg-slate-900/60 text-white ring-1 ring-purple-400/40"
                       : theme === "dark"
-                      ? "text-purple-300 hover:bg-slate-900/30"
-                      : "text-purple-700 hover:bg-purple-50"
+                      ? "text-slate-200 hover:bg-slate-900/30"
+                      : "text-slate-700 hover:bg-purple-50"
                   }`}
               >
                 Kontribusi Soal
