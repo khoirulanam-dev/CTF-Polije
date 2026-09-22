@@ -18,7 +18,7 @@ type NotificationsContextType = {
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined)
 
 const SEEN_KEY_PREFIX = 'ctfs_seen_notifications_v2:'
-const LAST_ALERT_KEY_PREFIX = 'ctfs_last_seen_alert_v1:'
+const SEEN_ALERTS_KEY_PREFIX = 'ctfs_seen_alerts_v2:'
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -28,7 +28,29 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const hasCheckedAlertOnLogin = useRef<boolean>(false)
 
   const storageKey = user ? `${SEEN_KEY_PREFIX}${user.id}` : `${SEEN_KEY_PREFIX}anon`
-  const alertStorageKey = user ? `${LAST_ALERT_KEY_PREFIX}${user.id}` : `${LAST_ALERT_KEY_PREFIX}anon`
+  const alertStorageKey = user ? `${SEEN_ALERTS_KEY_PREFIX}${user.id}` : `${SEEN_ALERTS_KEY_PREFIX}anon`
+  const userId = user?.id || 'anon'
+
+  const showAlertOnce = useCallback((alert: AppNotification) => {
+    if (typeof window === 'undefined') return false
+
+    try {
+      const stored = localStorage.getItem(alertStorageKey)
+      const seen: string[] = stored ? JSON.parse(stored) : []
+      const legacySeen = localStorage.getItem(`ctfs_last_seen_alert_v1:${userId}`)
+
+      if (seen.includes(alert.id) || legacySeen === alert.id) return false
+
+      localStorage.setItem(
+        alertStorageKey,
+        JSON.stringify(Array.from(new Set([...seen, alert.id])).slice(-100)),
+      )
+      setActiveAlert(alert)
+      return true
+    } catch {
+      return false
+    }
+  }, [alertStorageKey, userId])
 
   const dismissAlert = useCallback(() => {
     setActiveAlert(null)
@@ -55,24 +77,17 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       // Cek apakah ada pengumuman / soal baru untuk alert pop-up login pertama kali
       if (!hasCheckedAlertOnLogin.current && combined.length > 0) {
         hasCheckedAlertOnLogin.current = true
-        const lastSeenAlertId = typeof window !== 'undefined' ? localStorage.getItem(alertStorageKey) : null
-
         // Cari item terbaru yang berupa feature_update, system_update, atau new_challenge
         const latestFeatureOrChall = combined.find(
           (item) => item.notif_type === 'feature_update' || item.notif_type === 'system_update' || item.notif_type === 'new_challenge'
         )
 
-        if (latestFeatureOrChall && latestFeatureOrChall.id !== lastSeenAlertId) {
-          setActiveAlert(latestFeatureOrChall)
-          try {
-            localStorage.setItem(alertStorageKey, latestFeatureOrChall.id)
-          } catch {}
-        }
+        if (latestFeatureOrChall) showAlertOnce(latestFeatureOrChall)
       }
     } catch (err) {
       console.warn('Failed to refresh notifications', err)
     }
-  }, [user, storageKey, alertStorageKey])
+  }, [user, storageKey, showAlertOnce])
 
   const markAllRead = useCallback(() => {
     try {
@@ -110,7 +125,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           // Langsung tampilkan alert banner jika ada pengumuman baru realtime saat user online
           if (payload.new && (payload.new as any).is_active) {
             const newItem = payload.new as any
-            setActiveAlert({
+            showAlertOnce({
               id: `announcement-${newItem.id}`,
               notif_type: newItem.type === 'feature' ? 'feature_update' : 'system_update',
               title: newItem.title,
@@ -127,7 +142,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user, refresh])
+  }, [user, refresh, showAlertOnce])
 
   return (
     <NotificationsContext.Provider

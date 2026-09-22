@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { validatePassword } from "@/lib/password";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 export async function POST(req: Request) {
   try {
@@ -33,12 +34,20 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { email, password, username, team_token } = body;
+    const { email, password, username, team_token, turnstile_token } = body;
 
     if (!email || !password || !username || !team_token) {
       return NextResponse.json(
         { message: "Semua kolom wajib diisi (termasuk Team Token)" },
         { status: 400 }
+      );
+    }
+
+    const captcha = await verifyTurnstileToken(String(turnstile_token || ""), req);
+    if (!captcha.success) {
+      return NextResponse.json(
+        { message: captcha.error || "CAPTCHA tidak valid." },
+        { status: 400 },
       );
     }
 

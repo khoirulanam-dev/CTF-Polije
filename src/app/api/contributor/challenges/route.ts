@@ -130,23 +130,25 @@ export async function POST(req: Request) {
       }, { status: 400 })
     }
 
-    // 2. Validasi Season: Tidak boleh di season 'archived'
-    if (season_id && season_id !== 'none') {
-      const { data: season, error: seasonErr } = await adminClient
-        .from('seasons')
-        .select('id, number, name, status')
-        .eq('id', season_id)
-        .single()
+    // 2. Season wajib dipilih dan harus aktif atau draft.
+    if (!season_id || season_id === 'none') {
+      return NextResponse.json({ error: 'Target Season wajib dipilih.' }, { status: 400 })
+    }
 
-      if (seasonErr || !season) {
-        return NextResponse.json({ error: 'Target Season tidak ditemukan' }, { status: 400 })
-      }
+    const { data: season, error: seasonErr } = await adminClient
+      .from('seasons')
+      .select('id, number, name, status')
+      .eq('id', season_id)
+      .single()
 
-      if (season.status === 'archived') {
-        return NextResponse.json({ 
-          error: `Season #${season.number} (${season.name}) telah berakhir. Kontributor tidak dapat menambahkan soal ke season yang telah selesai.` 
-        }, { status: 400 })
-      }
+    if (seasonErr || !season) {
+      return NextResponse.json({ error: 'Target Season tidak ditemukan' }, { status: 400 })
+    }
+
+    if (season.status === 'archived') {
+      return NextResponse.json({
+        error: `Season #${season.number} (${season.name}) telah berakhir. Kontributor tidak dapat menambahkan soal ke season yang telah selesai.`
+      }, { status: 400 })
     }
 
     // Siapkan hash flag
@@ -165,7 +167,7 @@ export async function POST(req: Request) {
       is_dynamic: Boolean(is_dynamic),
       min_points: min_points ? Number(min_points) : 0,
       decay_per_solve: decay_per_solve ? Number(decay_per_solve) : 0,
-      season_id: season_id && season_id !== 'none' ? season_id : null,
+      season_id,
       is_active: true,
       total_solves: 0,
       created_at: new Date().toISOString(),
@@ -228,7 +230,7 @@ export async function PUT(req: Request) {
     // Pastikan challenge ini milik user (atau user admin)
     const { data: existing, error: existErr } = await adminClient
       .from('challenges')
-      .select('id, created_by')
+      .select('id, created_by, season_id')
       .eq('id', challengeId)
       .single()
 
@@ -242,19 +244,26 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Anda hanya dapat mengubah soal yang Anda buat sendiri' }, { status: 403 })
     }
 
-    // Validasi season jika diubah
-    if (updates.season_id !== undefined && updates.season_id && updates.season_id !== 'none') {
-      const { data: season } = await adminClient
-        .from('seasons')
-        .select('id, number, name, status')
-        .eq('id', updates.season_id)
-        .single()
+    // Setiap soal wajib tetap memiliki season aktif atau draft.
+    const nextSeasonId = updates.season_id ?? existing.season_id
+    if (!nextSeasonId || nextSeasonId === 'none') {
+      return NextResponse.json({ error: 'Target Season wajib dipilih.' }, { status: 400 })
+    }
 
-      if (season && season.status === 'archived') {
-        return NextResponse.json({ 
-          error: `Season #${season.number} telah berakhir. Kontributor tidak dapat memindahkan soal ke season yang telah selesai.` 
-        }, { status: 400 })
-      }
+    const { data: season } = await adminClient
+      .from('seasons')
+      .select('id, number, name, status')
+      .eq('id', nextSeasonId)
+      .single()
+
+    if (!season) {
+      return NextResponse.json({ error: 'Target Season tidak ditemukan.' }, { status: 400 })
+    }
+
+    if (season.status === 'archived') {
+      return NextResponse.json({
+        error: `Season #${season.number} telah berakhir. Kontributor tidak dapat memindahkan soal ke season yang telah selesai.`
+      }, { status: 400 })
     }
 
     if (updates.attachments !== undefined) {
@@ -292,7 +301,7 @@ export async function PUT(req: Request) {
     if (updates.is_dynamic !== undefined) updatePayload.is_dynamic = Boolean(updates.is_dynamic)
     if (updates.min_points !== undefined) updatePayload.min_points = Number(updates.min_points)
     if (updates.decay_per_solve !== undefined) updatePayload.decay_per_solve = Number(updates.decay_per_solve)
-    if (updates.season_id !== undefined) updatePayload.season_id = updates.season_id === 'none' ? null : updates.season_id
+    if (updates.season_id !== undefined) updatePayload.season_id = nextSeasonId
 
     const { data: updated, error: updateErr } = await adminClient
       .from('challenges')

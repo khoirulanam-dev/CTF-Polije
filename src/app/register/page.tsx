@@ -13,6 +13,7 @@ import GoogleLoginButton from "@/components/GoogleLoginButton";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 import { validatePassword } from "@/lib/password";
+import TurnstileWidget from "@/components/TurnstileWidget";
 
 
 export default function RegisterPage() {
@@ -29,6 +30,7 @@ export default function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -38,7 +40,6 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
 
     const usernameError = isValidUsername(formData.username);
@@ -67,12 +68,20 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!captchaToken) {
+      setError("Silakan selesaikan CAPTCHA terlebih dahulu.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
       const { user, error } = await signUp(
         formData.email,
         formData.password,
         formData.username,
-        formData.teamToken.trim()
+        formData.teamToken.trim(),
+        captchaToken
       );
 
       if (error) {
@@ -135,6 +144,12 @@ export default function RegisterPage() {
                 className="font-medium text-blue-200 hover:text-white"
               >
                 sign in with an existing account
+              </Link>
+            </p>
+            <p className="mt-2 text-center text-xs text-slate-300">
+              Ingin langsung membuat soal?{" "}
+              <Link href="/register/contributor" className="font-semibold text-blue-200 hover:text-white">
+                Daftar sebagai contributor
               </Link>
             </p>
 
@@ -277,6 +292,12 @@ export default function RegisterPage() {
                   </span>
                 </div>
               </div>
+
+              <TurnstileWidget
+                onVerify={setCaptchaToken}
+                onExpire={() => setCaptchaToken("")}
+                onError={() => setCaptchaToken("")}
+              />
 
               {error && (
                 <div className="rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-200 ring-1 ring-red-500/30">

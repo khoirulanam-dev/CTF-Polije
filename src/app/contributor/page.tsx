@@ -68,7 +68,7 @@ export default function ContributorPage() {
     is_dynamic: false,
     min_points: '' as number | '',
     decay_per_solve: '' as number | '',
-    season_id: 'none',
+    season_id: '',
     hint: [] as string[],
     attachments: [] as Attachment[],
   })
@@ -153,10 +153,8 @@ export default function ContributorPage() {
   // Filtered challenges
   const filteredChallenges = useMemo(() => {
     return challenges.filter(c => {
-      const matchesSeason = selectedSeasonFilter === 'all' 
-        ? true 
-        : selectedSeasonFilter === 'unassigned'
-        ? !c.season_id
+      const matchesSeason = selectedSeasonFilter === 'all'
+        ? true
         : c.season_id === selectedSeasonFilter
 
       const matchesSearch = searchQuery.trim() === '' || 
@@ -169,8 +167,12 @@ export default function ContributorPage() {
 
   // Open Form for New Challenge
   const handleOpenAdd = () => {
-    // Default season: live active season if available
-    const activeSeason = seasons.find(s => s.status === 'active')
+    const defaultSeason = allowedSeasons.find(s => s.status === 'active') || allowedSeasons[0]
+    if (!defaultSeason) {
+      toast.error('Belum ada season yang tersedia untuk upload soal.')
+      return
+    }
+
     setEditingChallenge(null)
     setFormData({
       title: '',
@@ -183,7 +185,7 @@ export default function ContributorPage() {
       is_dynamic: false,
       min_points: '',
       decay_per_solve: '',
-      season_id: activeSeason ? activeSeason.id : 'none',
+      season_id: defaultSeason.id,
       hint: [],
       attachments: [],
     })
@@ -193,6 +195,7 @@ export default function ContributorPage() {
 
   // Open Form for Editing Challenge
   const handleOpenEdit = (ch: any) => {
+    const fallbackSeason = allowedSeasons.find(s => s.status === 'active') || allowedSeasons[0]
     setEditingChallenge(ch)
     setFormData({
       title: ch.title || '',
@@ -205,7 +208,7 @@ export default function ContributorPage() {
       is_dynamic: Boolean(ch.is_dynamic),
       min_points: ch.min_points || '',
       decay_per_solve: ch.decay_per_solve || '',
-      season_id: ch.season_id || 'none',
+      season_id: ch.season_id || fallbackSeason?.id || '',
       hint: Array.isArray(ch.hint) ? ch.hint : [],
       attachments: ch.attachments || [],
     })
@@ -232,13 +235,16 @@ export default function ContributorPage() {
       }
     }
 
-    // 2. Validasi Season: Cegah archived
-    if (formData.season_id && formData.season_id !== 'none') {
-      const targetSeason = seasons.find(s => s.id === formData.season_id)
-      if (targetSeason && targetSeason.status === 'archived') {
-        toast.error('Season telah berakhir! Kontributor hanya dapat memasukkan soal ke season Aktif atau Coming Soon.')
-        return
-      }
+    // 2. Season wajib dipilih dan harus aktif atau draft.
+    if (!formData.season_id || formData.season_id === 'none') {
+      toast.error('Pilih season terlebih dahulu sebelum menyimpan soal.')
+      return
+    }
+
+    const targetSeason = allowedSeasons.find(s => s.id === formData.season_id)
+    if (!targetSeason) {
+      toast.error('Season tidak tersedia atau sudah berakhir.')
+      return
     }
 
     setSubmitting(true)
@@ -258,7 +264,7 @@ export default function ContributorPage() {
         is_dynamic: formData.is_dynamic,
         min_points: formData.min_points ? Number(formData.min_points) : 0,
         decay_per_solve: formData.decay_per_solve ? Number(formData.decay_per_solve) : 0,
-        season_id: formData.season_id === 'none' ? null : formData.season_id,
+        season_id: formData.season_id,
         hint: formData.hint.filter(h => h.trim() !== ''),
         attachments: formData.attachments.filter(a => a.url?.trim() !== ''),
         flag: cleanFlag,
@@ -419,7 +425,6 @@ export default function ContributorPage() {
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
                 <SelectItem value="all">Semua Soal ({challenges.length})</SelectItem>
-                <SelectItem value="unassigned">Tanpa Season (Global)</SelectItem>
                 {seasons.map(s => (
                   <SelectItem key={s.id} value={s.id}>
                     Season #{s.number}: {s.name} ({s.status.toUpperCase()})
@@ -599,7 +604,6 @@ export default function ContributorPage() {
                   <SelectValue placeholder="Pilih Season..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
-                  <SelectItem value="none">Tanpa Season (Global)</SelectItem>
                   {allowedSeasons.map(s => (
                     <SelectItem key={s.id} value={s.id}>
                       Season #{s.number}: {s.name} ({s.status === 'active' ? 'LIVE' : 'COMING SOON'})

@@ -4,20 +4,26 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { sendPasswordReset } from '@/lib/auth'
 import Link from 'next/link'
+import TurnstileWidget from '@/components/TurnstileWidget'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
     setSuccess('')
+    if (!captchaToken) {
+      setError('Silakan selesaikan CAPTCHA terlebih dahulu.')
+      return
+    }
+    setLoading(true)
     try {
-      const { error } = await sendPasswordReset(email)
+      const { error } = await sendPasswordReset(email, captchaToken)
       if (error) {
         setError(error)
       } else {
@@ -50,6 +56,11 @@ export default function ForgotPasswordPage() {
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-900 dark:text-gray-100 sm:text-sm"
             value={email}
             onChange={e => setEmail(e.target.value)}
+          />
+          <TurnstileWidget
+            onVerify={setCaptchaToken}
+            onExpire={() => setCaptchaToken('')}
+            onError={() => setCaptchaToken('')}
           />
           {error && (
             <div className="rounded-md bg-red-50 dark:bg-red-900 p-3 text-sm text-red-700 dark:text-red-300">

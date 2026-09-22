@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Copy, Check, ChevronDown } from 'lucide-react'
+import { Copy, Check, ChevronDown, UsersRound } from 'lucide-react'
 import ChallengeListItem from '@/components/admin/ChallengeListItem'
 import ChallengeOverviewCard from '@/components/admin/ChallengeOverviewCard'
 import RecentSolversList from '@/components/admin/RecentSolversList'
@@ -438,6 +438,9 @@ export default function AdminPage() {
                       onClick={() => router.push('/admin/seasons')}
                     >
                       ⚡ Seasons
+                    </Button>
+                    <Button variant="outline" onClick={() => router.push('/admin/users')}>
+                      <UsersRound className="h-4 w-4" /> Users
                     </Button>
                     <Button variant="outline" onClick={() => router.push('/admin/event')}>Event Mode</Button>
                     <Button onClick={openAdd}>+ Add Challenge</Button>

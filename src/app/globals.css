@@ -223,6 +223,69 @@ select {
   }
 }
 
+/* Interaction-only sheen: no continuous animation or extra render loop. */
+/* Native buttons and shared Button components get the same lightweight effect.
+   Add data-shimmer="off" to an exceptional control that must stay untouched. */
+:where(.shimmer-button, button:not([data-shimmer="off"])) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+:where(.shimmer-button, button:not([data-shimmer="off"]))::after {
+  position: absolute;
+  inset: -150% -35%;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(
+    110deg,
+    transparent 42%,
+    rgb(255 255 255 / 0.28) 50%,
+    transparent 58%
+  );
+  opacity: 0;
+  transform: translateX(-65%) rotate(12deg);
+}
+
+:where(.shimmer-button, button:not([data-shimmer="off"])):hover::after,
+:where(.shimmer-button, button:not([data-shimmer="off"])):focus-visible::after {
+  animation: button-shimmer 850ms ease-out;
+}
+
+:where(.shimmer-button, button:not([data-shimmer="off"])) > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes button-shimmer {
+  0% {
+    opacity: 0;
+    transform: translateX(-65%) rotate(12deg);
+  }
+
+  15% {
+    opacity: 0.75;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(65%) rotate(12deg);
+  }
+}
+
+/* Keep the browser's view-transition crossfade disabled; the new root is
+   animated by the theme toggler only. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-transition="active"]::view-transition-group(root) {
+  animation-duration: var(--theme-transition-duration);
+}
+
 /* tmp */
 /* Light mode */
 *::-webkit-scrollbar-thumb {
@@ -266,3 +329,12 @@ html.reduced-motion canvas:not([role="img"]) {
   display: none !important;
 }
 
+html.reduced-motion :where(.shimmer-button, button:not([data-shimmer="off"]))::after {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.shimmer-button, button:not([data-shimmer="off"]))::after {
+    display: none;
+  }
+}

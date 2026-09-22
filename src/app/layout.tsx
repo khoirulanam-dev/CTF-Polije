@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { ReducedMotionProvider } from "@/contexts/ReducedMotionContext";
+import PageTransition from "@/components/PageTransition";
 import APP from "@/config";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -148,7 +149,9 @@ export default function RootLayout({
                   <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
                     <Navbar />
                     <TopAlertBanner />
-                    <div className="pt-14">{children}</div>
+                    <div className="pt-14">
+                      <PageTransition>{children}</PageTransition>
+                    </div>
                     <Toaster position="top-right" reverseOrder={false} />
                     <Analytics />
                   </div>

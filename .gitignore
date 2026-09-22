@@ -41,7 +41,8 @@ _tmp
 
 .vscode
 .vercel
-
+AGENTS.md
+CLAUDE.md
 state.json
 solves.json
 *.sql

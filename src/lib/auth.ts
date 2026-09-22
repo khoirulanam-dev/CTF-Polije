@@ -34,9 +34,22 @@ export async function loginGoogle(): Promise<AuthResponse> {
  * Send password reset email
  */
 export async function sendPasswordReset(
-  email: string
+  email: string,
+  turnstileToken?: string,
 ): Promise<{ error: string | null }> {
   try {
+    if (turnstileToken) {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, turnstile_token: turnstileToken }),
+      });
+      const data = await response.json().catch(() => ({}));
+      return response.ok
+        ? { error: null }
+        : { error: data?.message ?? "Failed to send reset email" };
+    }
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/challenges`,
     });
@@ -85,7 +98,8 @@ export async function signUp(
   email: string,
   password: string,
   username: string,
-  teamToken: string
+  teamToken: string,
+  turnstileToken?: string,
 ): Promise<AuthResponse> {
   try {
     // ✅ allowed domain (seperti sebelumnya)
@@ -113,6 +127,7 @@ export async function signUp(
         password,
         username,
         team_token: teamToken,
+        turnstile_token: turnstileToken,
       }),
     });
 
@@ -160,37 +175,65 @@ export async function signUp(
  */
 export async function signIn(
   identifier: string,
-  password: string
+  password: string,
+  turnstileToken?: string,
 ): Promise<AuthResponse> {
   try {
-    let email = identifier;
+    let authUser;
 
-    // Kalau bukan email → anggap username, ambil email via RPC
-    if (!identifier.includes("@")) {
-      const { data: rpcEmail, error: rpcError } = await supabase.rpc(
-        "get_email_by_username",
-        {
-          p_username: identifier,
-        }
-      );
-
-      if (rpcError || !rpcEmail) {
-        return { user: null, error: "User not found" };
+    if (turnstileToken) {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier,
+          password,
+          turnstile_token: turnstileToken,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.session) {
+        return { user: null, error: result?.message ?? "Login failed" };
       }
 
-      email = rpcEmail;
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.setSession(result.session);
+      if (sessionError || !sessionData.user) {
+        return { user: null, error: sessionError?.message ?? "Login failed" };
+      }
+      authUser = sessionData.user;
+    } else {
+      let email = identifier;
+
+      // Kalau bukan email → anggap username, ambil email via RPC
+      if (!identifier.includes("@")) {
+        const { data: rpcEmail, error: rpcError } = await supabase.rpc(
+          "get_email_by_username",
+          {
+            p_username: identifier,
+          }
+        );
+
+        if (rpcError || !rpcEmail) {
+          return { user: null, error: "User not found" };
+        }
+
+        email = rpcEmail;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        return { user: null, error: error.message };
+      }
+
+      authUser = data.user;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      return { user: null, error: error.message };
-    }
-
-    if (!data.user) {
+    if (!authUser) {
       return { user: null, error: "Login failed" };
     }
 
@@ -198,19 +241,19 @@ export async function signIn(
     let { data: userData, error: userError } = await supabase
       .from("users")
       .select("*")
-      .eq("id", data.user.id)
+      .eq("id", authUser.id)
       .single();
 
     if (userError || !userData) {
       // Auto-create profile kalau belum ada
       const username =
-        data.user.user_metadata?.username ??
-        (data.user.email
-          ? data.user.email.split("@")[0]
-          : "user_" + data.user.id.substring(0, 8));
+        authUser.user_metadata?.username ??
+        (authUser.email
+          ? authUser.email.split("@")[0]
+          : "user_" + authUser.id.substring(0, 8));
 
       const { error: rpcError } = await supabase.rpc("create_profile", {
-        p_id: data.user.id,
+        p_id: authUser.id,
         p_username: username,
       });
 
@@ -222,7 +265,7 @@ export async function signIn(
       const { data: newUserData, error: newUserError } = await supabase
         .from("users")
         .select("*")
-        .eq("id", data.user.id)
+        .eq("id", authUser.id)
         .single();
 
       if (newUserError) {

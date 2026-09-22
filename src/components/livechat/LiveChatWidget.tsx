@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePresence } from "@/contexts/PresenceContext";
 import { supabase } from "@/lib/supabase";
@@ -1049,8 +1050,9 @@ export default function LiveChatWidget() {
   }
 
   if (!activeUserId && !authLoading) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <>
       {!open && (
         <div className="fixed bottom-5 right-5 z-50">
@@ -1779,6 +1781,7 @@ export default function LiveChatWidget() {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

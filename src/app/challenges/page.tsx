@@ -524,7 +524,7 @@ export default function ChallengesPage() {
       {/* Background halus berbasis CSS (GPU-accelerated, zero JS main-thread load) */}
       <div
         aria-hidden
-        className="fixed inset-0 -z-30 pointer-events-none bg-[radial-gradient(ellipse_at_top_left,_rgba(14,165,233,0.14)_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(79,70,229,0.14)_0%,_transparent_55%)]"
+        className="fixed inset-0 -z-30 pointer-events-none bg-[#eaf5fb] dark:bg-[#102337]"
       />
       <div
         aria-hidden
@@ -780,21 +780,21 @@ export default function ChallengesPage() {
 
         {/* Coming Soon Teaser Banner (Muncul untuk SEMUA role saat melihat season aktif dan ada season draft berikutnya) */}
         {upcomingDraftSeason && !selectedSeasonId && (
-          <div className="rounded-2xl p-4 bg-gradient-to-r from-violet-950/70 via-purple-900/35 to-slate-900/80 border border-violet-500/35 text-violet-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-violet-950/20 animate-in fade-in duration-300">
+          <div className="rounded-2xl p-4 bg-gradient-to-r from-violet-100 via-purple-100 to-indigo-100 dark:from-violet-950/70 dark:via-purple-900/35 dark:to-slate-900/80 border border-violet-300 dark:border-violet-500/35 text-violet-900 dark:text-violet-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-violet-950/20 animate-in fade-in duration-300">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 border border-violet-500/40 text-xl shadow-inner">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-200 dark:bg-violet-500/20 border border-violet-300 dark:border-violet-500/40 text-xl shadow-inner">
                 🚀
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-violet-500/25 text-violet-300 border border-violet-500/40">
+                  <span className="text-[11px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-violet-200 dark:bg-violet-500/25 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-500/40">
                     Coming Soon
                   </span>
-                  <span className="text-xs sm:text-sm font-bold text-white">
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
                     {upcomingDraftSeason.name} Sedang Disiapkan!
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 mt-1">
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                   Admin sedang merancang tantangan baru untuk musim berikutnya. Seluruh soal &amp; flag baru masih dirahasiakan sampai peluncuran resmi.
                 </p>
               </div>

@@ -2,6 +2,12 @@
 const supabaseHostname = new URL(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 ).hostname;
+const scriptSources = [
+  "'self'",
+  "'unsafe-inline'",
+  ...(process.env.NODE_ENV !== 'production' ? ["'unsafe-eval'"] : []),
+  'https://vercel.live',
+];
 
 const nextConfig = {
   compress: true,
@@ -16,11 +22,12 @@ const nextConfig = {
             "form-action 'self'",
             "frame-ancestors 'none'",
             "object-src 'none'",
-            "script-src 'self' 'unsafe-inline' https://vercel.live",
+            `script-src ${scriptSources.join(' ')} https://challenges.cloudflare.com`,
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: https://*.supabase.co https://avatars.githubusercontent.com",
             "font-src 'self' data:",
-            "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vercel.live",
+            "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vercel.live https://challenges.cloudflare.com",
+            "frame-src 'self' https://challenges.cloudflare.com",
             "worker-src 'self' blob:",
           ].join('; ') },
           { key: 'X-Frame-Options', value: 'DENY' },
