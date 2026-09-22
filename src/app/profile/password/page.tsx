@@ -50,6 +50,10 @@ export default function ChangePasswordPage() {
       setError('New passwords do not match')
       return
     }
+    if (newPassword.length < 8) {
+      setError('Password minimal 8 karakter')
+      return
+    }
     setLoading(true)
     try {
       const { error } = await updatePassword(newPassword)

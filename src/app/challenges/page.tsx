@@ -17,6 +17,7 @@ import {
 import { getActiveSeason, getPublicSeasons } from "@/lib/seasons";
 import { isAdmin } from "@/lib/auth";
 import { ChallengeWithSolve, Attachment, Season } from "@/types";
+import { isAllowedAttachmentFileUrl, normalizeExternalHttpsUrl } from "@/lib/safe-url";
 import ChallengeCard from "@/components/challenges/ChallengeCard";
 import Loader from "@/components/custom/loading";
 import TitlePage from "@/components/custom/TitlePage";
@@ -476,10 +477,18 @@ export default function ChallengesPage() {
     attachment: Attachment,
     attachmentKey: string
   ) => {
+    const safeUrl = attachment.type === "file"
+      ? (isAllowedAttachmentFileUrl(attachment.url) ? normalizeExternalHttpsUrl(attachment.url) : "")
+      : normalizeExternalHttpsUrl(attachment.url);
+    if (!safeUrl) {
+      toast.error("URL attachment tidak valid atau tidak diizinkan");
+      return;
+    }
+
     setDownloading((prev) => ({ ...prev, [attachmentKey]: true }));
     try {
       if (attachment.type === "file") {
-        const res = await fetch(attachment.url);
+        const res = await fetch(safeUrl);
         if (!res.ok) throw new Error("Failed to fetch file");
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -491,11 +500,11 @@ export default function ChallengesPage() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } else {
-        window.open(attachment.url, "_blank");
+        window.open(safeUrl, "_blank", "noopener,noreferrer");
       }
     } catch (err) {
       console.error(err);
-      window.open(attachment.url, "_blank");
+      window.open(safeUrl, "_blank", "noopener,noreferrer");
     } finally {
       setDownloading((prev) => ({ ...prev, [attachmentKey]: false }));
     }

@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 import { keepAliveConfig as config } from './keep-alive-config'
 import { QueryResponse, determineAction, generateRandomString } from './helper'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic' // defaults to auto
 
@@ -48,7 +49,28 @@ const fetchOtherEndpoints = async (): Promise<string[]> => {
   return []
 }
 
-export async function GET() {
+function hasValidCronSecret(req: Request): boolean {
+  const configuredSecret = process.env.CRON_SECRET || process.env.KEEP_ALIVE_SECRET
+  if (!configuredSecret) return false
+
+  const authorization = req.headers.get('authorization')
+  const headerSecret = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]
+    || req.headers.get('x-keepalive-secret')
+  if (!headerSecret) return false
+
+  const expected = Buffer.from(configuredSecret)
+  const received = Buffer.from(headerSecret)
+  return expected.length === received.length && crypto.timingSafeEqual(expected, received)
+}
+
+export async function GET(req: Request) {
+  if (!hasValidCronSecret(req)) {
+    return new Response('Unauthorized', {
+      status: 401,
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  }
+
   let responseMessage: string = ''
   let successfulResponses: boolean = true
 
@@ -71,7 +93,8 @@ export async function GET() {
     responseMessage += `\n\nOther Endpoint Results:\n${fetchResults.join('\n')}`
   }
 
-  return new Response(responseMessage, {
-    status: (successfulResponses == true) ? 200 : 400
+  return new Response(successfulResponses ? 'OK' : 'Keep-alive check failed', {
+    status: successfulResponses ? 200 : 503,
+    headers: { 'Cache-Control': 'no-store' },
   })
 }

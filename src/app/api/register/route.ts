@@ -2,45 +2,27 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-
-// 🛡️ In-memory IP Rate Limiter: Max 5 registrasi per IP per 15 menit
-type RateLimitRecord = { count: number; firstAttempt: number };
-const rateLimitMap = new Map<string, RateLimitRecord>();
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 menit
-const MAX_ATTEMPTS_PER_WINDOW = 5;
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-
-  // Bersihkan record kadaluarsa secara periodik
-  if (rateLimitMap.size > 2000) {
-    rateLimitMap.forEach((val, key) => {
-      if (now - val.firstAttempt > RATE_LIMIT_WINDOW_MS) {
-        rateLimitMap.delete(key);
-      }
-    });
-  }
-
-  if (!record || now - record.firstAttempt > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(ip, { count: 1, firstAttempt: now });
-    return false;
-  }
-
-  if (record.count >= MAX_ATTEMPTS_PER_WINDOW) {
-    return true;
-  }
-
-  record.count += 1;
-  return false;
-}
+import { validatePassword } from "@/lib/password";
 
 export async function POST(req: Request) {
   try {
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+    // Vercel provides x-real-ip from the edge. Do not trust a client-supplied
+    // x-forwarded-for value as the primary identity of the caller.
+    const clientKey = req.headers.get("x-real-ip")?.trim() || "unknown-client";
+    const { data: rateLimited, error: rateLimitError } = await supabase.rpc(
+      "check_registration_rate_limit",
+      { p_key: clientKey, p_max_attempts: 5, p_window_seconds: 900 }
+    );
 
-    if (isRateLimited(ip)) {
+    if (rateLimitError) {
+      console.error("Registration rate limiter unavailable:", rateLimitError.message);
+      return NextResponse.json(
+        { message: "Registrasi sementara tidak tersedia. Silakan coba lagi nanti." },
+        { status: 503 }
+      );
+    }
+
+    if (rateLimited === true) {
       return NextResponse.json(
         {
           message:
@@ -106,9 +88,10 @@ export async function POST(req: Request) {
       );
     }
 
-    if (String(password).length < 6) {
+    const passwordError = validatePassword(String(password));
+    if (passwordError) {
       return NextResponse.json(
-        { message: "Password minimal 6 karakter" },
+        { message: passwordError },
         { status: 400 }
       );
     }

@@ -13,6 +13,7 @@ import { supabase } from './supabase'
 import { getActiveSeason } from './seasons'
 import { isAdmin, getUserRole, getCurrentUser } from './auth'
 import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment, Announcement, AppNotification } from '@/types'
+import { validateAttachments } from './safe-url'
 
 /**
  * Get all challenges
@@ -176,6 +177,9 @@ export async function addChallenge(challengeData: {
   created_by?: string | null
 }): Promise<void> {
   try {
+    const attachmentError = validateAttachments(challengeData.attachments)
+    if (attachmentError) throw new Error(attachmentError)
+
     let hintValue: any = null;
     if (Array.isArray(challengeData.hint)) {
       hintValue = challengeData.hint.length > 0 ? JSON.stringify(challengeData.hint) : null;
@@ -260,6 +264,9 @@ export async function updateChallenge(challengeId: string, challengeData: {
   created_by?: string | null
 }): Promise<void> {
   try {
+    const attachmentError = validateAttachments(challengeData.attachments)
+    if (attachmentError) throw new Error(attachmentError)
+
     let hintValue: any = null;
     if (Array.isArray(challengeData.hint)) {
       hintValue = challengeData.hint.length > 0 ? JSON.stringify(challengeData.hint) : null;
@@ -546,7 +553,6 @@ export async function getSolversByChallenge(challengeId: string) {
 export async function getFirstBloodChallengeIds(userId: string): Promise<string[]> {
   try {
     const { data, error } = await supabase.rpc('get_user_first_bloods', { p_user_id: userId })
-    console.log(data, error)
     if (error) throw error
     // data is expected to be array of { challenge_id }
     return (data || []).map((r: any) => r.challenge_id)
@@ -850,4 +856,3 @@ export async function getUnlockedHints(challengeId: string): Promise<number[]> {
     return localList;
   }
 }
-

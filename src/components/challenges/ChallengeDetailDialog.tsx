@@ -7,6 +7,7 @@ import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import SolversList, { Solver } from './SolversList';
 import HintDialog from './HintDialog';
 import { Attachment, ChallengeWithSolve } from '@/types';
+import { normalizeExternalHttpsUrl } from '@/lib/safe-url';
 import { getUnlockedHints } from '@/lib/challenges';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -212,15 +213,16 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
                   <div>
                     <p className="text-xs text-gray-400 mb-1">🔗 Links</p>
                     <div className="flex flex-wrap gap-2">
-                      {challenge.attachments.filter(att => att.type !== 'file').map((attachment, idx) => {
+                      {challenge.attachments.filter(att => att.type !== 'file' && normalizeExternalHttpsUrl(att.url)).map((attachment, idx) => {
                         const displayName = attachment.name?.length > 40 ? attachment.name.slice(0, 37) + "..." : attachment.name || (attachment.url ? attachment.url.slice(0, 40) + "..." : 'link');
+                        const safeUrl = normalizeExternalHttpsUrl(attachment.url);
                         return (
                           <a
                             key={idx}
-                            href={attachment.url}
+                            href={safeUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            title={attachment.url}
+                            title={safeUrl}
                             className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded-md shadow"
                           >
                             {displayName}

@@ -4,6 +4,7 @@
 import { PostgrestSingleResponse } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { User, ChallengeWithSolve } from '@/types'
+import { normalizeProfileUrl } from './safe-url'
 
 export type UserDetail = {
   id: string
@@ -273,15 +274,33 @@ export async function updateProfile(
   profile: ProfileUpdateInput
 ): Promise<{ error: string | null; profile?: ProfileUpdateResult }> {
   try {
+    const normalizedGithubUrl = normalizeProfileUrl(profile.github_url, 'github_url')
+    const normalizedLinkedinUrl = normalizeProfileUrl(profile.linkedin_url, 'linkedin_url')
+    const normalizedInstagramUrl = normalizeProfileUrl(profile.instagram_url, 'instagram_url')
+    const normalizedWebsiteUrl = normalizeProfileUrl(profile.website_url, 'website_url')
+
+    if (profile.github_url && !normalizedGithubUrl) {
+      return { error: 'GitHub URL tidak valid. Gunakan tautan HTTPS ke github.com.' }
+    }
+    if (profile.linkedin_url && !normalizedLinkedinUrl) {
+      return { error: 'LinkedIn URL tidak valid. Gunakan tautan HTTPS ke linkedin.com.' }
+    }
+    if (profile.instagram_url && !normalizedInstagramUrl) {
+      return { error: 'Instagram URL tidak valid. Gunakan tautan HTTPS ke instagram.com.' }
+    }
+    if (profile.website_url && !normalizedWebsiteUrl) {
+      return { error: 'Website URL tidak valid. Gunakan tautan HTTPS.' }
+    }
+
     const { data, error } = await supabase.rpc('update_profile', {
       p_id: userId,
       p_username: profile.username,
       p_avatar_url: profile.avatar_url || null,
       p_bio: profile.bio || null,
-      p_github_url: profile.github_url || null,
-      p_linkedin_url: profile.linkedin_url || null,
-      p_instagram_url: profile.instagram_url || null,
-      p_website_url: profile.website_url || null,
+      p_github_url: normalizedGithubUrl || null,
+      p_linkedin_url: normalizedLinkedinUrl || null,
+      p_instagram_url: normalizedInstagramUrl || null,
+      p_website_url: normalizedWebsiteUrl || null,
     })
 
     if (error || !data) {
@@ -364,4 +383,3 @@ export async function getUserLastActive(
   if (timestamps.length === 0) return null;
   return new Date(Math.max(...timestamps)).toISOString();
 }
-

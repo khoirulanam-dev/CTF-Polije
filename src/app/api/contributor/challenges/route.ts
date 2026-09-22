@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { validateAttachments } from '@/lib/safe-url'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -41,26 +42,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: auth.error }, { status: 403 })
     }
 
-    const { adminClient, user, userId } = auth
+    const { adminClient, userId } = auth
 
-    // Ambil soal dimana created_by = userId atau author = username
-    let query = adminClient
+    // Ownership is an immutable UUID relation, never a display-name match.
+    const { data: challenges, error } = await adminClient
       .from('challenges')
       .select('*, seasons(id, number, name, status)')
+      .eq('created_by', userId)
       .order('created_at', { ascending: false })
-
-    const { data: challenges, error } = await query
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Filter hanya soal buatan kontributor sendiri (jika bukan admin murni)
-    const myChallenges = challenges.filter(c => 
-      c.created_by === userId || 
-      c.author === user.username ||
-      (c.description && c.description.toLowerCase().includes(`author: ${user.username.toLowerCase()}`))
-    )
+    const myChallenges = challenges || []
 
     // Ambil flag untuk masing-masing soal buatan mereka
     const challengeIds = myChallenges.map(c => c.id)
@@ -119,6 +114,11 @@ export async function POST(req: Request) {
 
     if (!title || !description || !category || points === undefined || !flag) {
       return NextResponse.json({ error: 'Data wajib belum lengkap (title, description, category, points, flag)' }, { status: 400 })
+    }
+
+    const attachmentError = validateAttachments(attachments)
+    if (attachmentError) {
+      return NextResponse.json({ error: attachmentError }, { status: 400 })
     }
 
     // 1. Validasi format Flag POLIJE{.......}
@@ -182,23 +182,7 @@ export async function POST(req: Request) {
       .single()
 
     if (error) {
-      // Fallback jika kolom author atau created_by belum ada di schema
-      if (error.message?.includes('author') || error.message?.includes('created_by')) {
-        delete insertPayload.author
-        delete insertPayload.created_by
-        const retry = await adminClient
-          .from('challenges')
-          .insert(insertPayload)
-          .select()
-          .single()
-
-        if (retry.error) {
-          return NextResponse.json({ error: retry.error.message }, { status: 500 })
-        }
-        insertedChallenge = retry.data
-      } else {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
     } else {
       insertedChallenge = data
     }
@@ -233,7 +217,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: auth.error }, { status: 403 })
     }
 
-    const { adminClient, user, userId } = auth
+    const { adminClient, userId } = auth
     const body = await req.json()
     const { challengeId, ...updates } = body
 
@@ -244,7 +228,7 @@ export async function PUT(req: Request) {
     // Pastikan challenge ini milik user (atau user admin)
     const { data: existing, error: existErr } = await adminClient
       .from('challenges')
-      .select('id, created_by, author, description')
+      .select('id, created_by')
       .eq('id', challengeId)
       .single()
 
@@ -252,10 +236,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Challenge tidak ditemukan' }, { status: 404 })
     }
 
-    const isOwner = user.is_admin === true || 
-                    existing.created_by === userId || 
-                    existing.author === user.username ||
-                    (existing.description && existing.description.toLowerCase().includes(`author: ${user.username.toLowerCase()}`))
+    const isOwner = existing.created_by === userId
 
     if (!isOwner) {
       return NextResponse.json({ error: 'Anda hanya dapat mengubah soal yang Anda buat sendiri' }, { status: 403 })
@@ -273,6 +254,13 @@ export async function PUT(req: Request) {
         return NextResponse.json({ 
           error: `Season #${season.number} telah berakhir. Kontributor tidak dapat memindahkan soal ke season yang telah selesai.` 
         }, { status: 400 })
+      }
+    }
+
+    if (updates.attachments !== undefined) {
+      const attachmentError = validateAttachments(updates.attachments)
+      if (attachmentError) {
+        return NextResponse.json({ error: attachmentError }, { status: 400 })
       }
     }
 
@@ -344,7 +332,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: auth.error }, { status: 403 })
     }
 
-    const { adminClient, user, userId } = auth
+    const { adminClient, userId } = auth
     const { searchParams } = new URL(req.url)
     const challengeId = searchParams.get('id')
 
@@ -354,7 +342,7 @@ export async function DELETE(req: Request) {
 
     const { data: existing, error: existErr } = await adminClient
       .from('challenges')
-      .select('id, created_by, author, description')
+      .select('id, created_by')
       .eq('id', challengeId)
       .single()
 
@@ -362,10 +350,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Challenge tidak ditemukan' }, { status: 404 })
     }
 
-    const isOwner = user.is_admin === true || 
-                    existing.created_by === userId || 
-                    existing.author === user.username ||
-                    (existing.description && existing.description.toLowerCase().includes(`author: ${user.username.toLowerCase()}`))
+    const isOwner = existing.created_by === userId
 
     if (!isOwner) {
       return NextResponse.json({ error: 'Anda hanya dapat menghapus soal yang Anda buat sendiri' }, { status: 403 })

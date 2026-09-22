@@ -28,6 +28,7 @@ import APP from '@/config'
 export default function AdminPage() {
   const router = useRouter()
   const { user, loading } = useAuth()
+  const [authorized, setAuthorized] = useState<boolean | null>(null)
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [solvers, setSolvers] = useState<any[]>([])
   const [siteInfo, setSiteInfo] = useState<any | null>(null)
@@ -107,6 +108,7 @@ export default function AdminPage() {
 
       // if not logged in, redirect to challenges listing
       if (!user) {
+        setAuthorized(false)
         router.push('/challenges')
         return
       }
@@ -114,9 +116,12 @@ export default function AdminPage() {
       const adminCheck = await isAdmin()
       if (!mounted) return
       if (!adminCheck) {
+        setAuthorized(false)
         router.push('/challenges')
         return
       }
+
+      setAuthorized(true)
 
       // Check URL query for season filter
       if (typeof window !== 'undefined') {
@@ -408,7 +413,7 @@ export default function AdminPage() {
   const updateAttachment = (i: number, field: keyof Attachment, v: string) => setFormData(prev => ({ ...prev, attachments: prev.attachments.map((a, idx) => idx === i ? { ...a, [field]: v } : a) }))
   const removeAttachment = (i: number) => setFormData(prev => ({ ...prev, attachments: prev.attachments.filter((_, idx) => idx !== i) }))
 
-  if (loading) return <Loader fullscreen color="text-orange-500" />
+  if (loading || authorized === null) return <Loader fullscreen color="text-orange-500" />
   if (!user) return null
 
   return (

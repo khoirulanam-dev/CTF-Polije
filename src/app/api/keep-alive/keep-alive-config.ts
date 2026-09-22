@@ -10,7 +10,7 @@ export const keepAliveConfig = {
   column: 'name',
 
   // Configuration for actions taken on the database
-  allowInsertionAndDeletion: true, // Set this to false unless you're using a 'keep-alive'-dedicated table
+  allowInsertionAndDeletion: false,
   disableRandomStringQuery: false, // Set this to true if allowInsertionAndDeletion is true. Otherwise, no db actions taken
   sizeBeforeDeletions: 10, // Max size of table before any deletions start (if allowInsertionAndDeletion is true)
 

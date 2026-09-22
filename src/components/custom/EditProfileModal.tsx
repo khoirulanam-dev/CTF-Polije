@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import ImageWithFallback from '@/components/ImageWithFallback'
 import Link from 'next/link'
+import { normalizeProfileUrl } from '@/lib/safe-url'
 
 type Props = {
   userId: string
@@ -141,6 +142,31 @@ export default function EditProfileModal({
       return
     }
 
+    const normalizedGithubUrl = normalizeProfileUrl(githubUrl, 'github_url')
+    const normalizedLinkedinUrl = normalizeProfileUrl(linkedinUrl, 'linkedin_url')
+    const normalizedInstagramUrl = normalizeProfileUrl(instagramUrl, 'instagram_url')
+    const normalizedWebsiteUrl = normalizeProfileUrl(websiteUrl, 'website_url')
+    if (githubUrl.trim() && !normalizedGithubUrl) {
+      setError('GitHub URL harus menggunakan HTTPS dan domain github.com')
+      setLoading(false)
+      return
+    }
+    if (linkedinUrl.trim() && !normalizedLinkedinUrl) {
+      setError('LinkedIn URL harus menggunakan HTTPS dan domain linkedin.com')
+      setLoading(false)
+      return
+    }
+    if (instagramUrl.trim() && !normalizedInstagramUrl) {
+      setError('Instagram URL harus menggunakan HTTPS dan domain instagram.com')
+      setLoading(false)
+      return
+    }
+    if (websiteUrl.trim() && !normalizedWebsiteUrl) {
+      setError('Website URL harus menggunakan HTTPS')
+      setLoading(false)
+      return
+    }
+
     let nextAvatarUrl = avatarUrl.trim()
     if (avatarFile) {
       const upload = await uploadProfileAvatar(userId, avatarFile)
@@ -156,10 +182,10 @@ export default function EditProfileModal({
       username: usernameTrimmed,
       avatar_url: nextAvatarUrl || null,
       bio: bio.trim() || null,
-      github_url: githubUrl.trim() || null,
-      linkedin_url: linkedinUrl.trim() || null,
-      instagram_url: instagramUrl.trim() || null,
-      website_url: websiteUrl.trim() || null,
+      github_url: normalizedGithubUrl || null,
+      linkedin_url: normalizedLinkedinUrl || null,
+      instagram_url: normalizedInstagramUrl || null,
+      website_url: normalizedWebsiteUrl || null,
     })
 
     if (result.error || !result.profile) {

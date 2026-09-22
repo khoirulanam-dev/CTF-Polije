@@ -48,3 +48,4 @@ solves.json
 !/supabase/migrations/
 !/supabase/migrations/*.sql
 /supabase/.temp/
+security-review/

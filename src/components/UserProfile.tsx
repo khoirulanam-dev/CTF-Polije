@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePresence } from "@/contexts/PresenceContext";
+import { normalizeProfileUrl } from "@/lib/safe-url";
 
 type UserDetail = {
   id: string;
@@ -168,13 +169,6 @@ function getUserBadges(
   return badges;
 }
 
-function normalizeProfileUrl(url?: string | null) {
-  if (!url) return "";
-  const trimmed = url.trim();
-  if (!trimmed) return "";
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
-
 // Category gradient color mapping
 const categoryGradients: Record<string, string> = {
   Web: "from-sky-500 to-cyan-400",
@@ -275,22 +269,22 @@ export default function UserProfile({
     ? [
         {
           label: "GitHub",
-          href: normalizeProfileUrl(userDetail.github_url),
+          href: normalizeProfileUrl(userDetail.github_url, "github_url"),
           Icon: Github,
         },
         {
           label: "LinkedIn",
-          href: normalizeProfileUrl(userDetail.linkedin_url),
+          href: normalizeProfileUrl(userDetail.linkedin_url, "linkedin_url"),
           Icon: Linkedin,
         },
         {
           label: "Instagram",
-          href: normalizeProfileUrl(userDetail.instagram_url),
+          href: normalizeProfileUrl(userDetail.instagram_url, "instagram_url"),
           Icon: Instagram,
         },
         {
           label: "Website",
-          href: normalizeProfileUrl(userDetail.website_url),
+          href: normalizeProfileUrl(userDetail.website_url, "website_url"),
           Icon: Globe,
         },
       ].filter((link) => link.href)

@@ -12,6 +12,7 @@ import Loader from "@/components/custom/loading";
 import GoogleLoginButton from "@/components/GoogleLoginButton";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
+import { validatePassword } from "@/lib/password";
 
 
 export default function RegisterPage() {
@@ -53,8 +54,9 @@ export default function RegisterPage() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters");
+    const passwordError = validatePassword(formData.password);
+    if (passwordError) {
+      setError(passwordError);
       setLoading(false);
       return;
     }

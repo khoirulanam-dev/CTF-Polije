@@ -1,6 +1,7 @@
 // src/lib/auth.ts
 import { supabase } from "./supabase";
 import { User } from "@/types";
+import { validatePassword } from "./password";
 
 export interface AuthResponse {
   user: User | null;
@@ -55,6 +56,9 @@ export async function updatePassword(
   newPassword: string
 ): Promise<{ error: string | null }> {
   try {
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) return { error: passwordError };
+
     const {
       data: { user },
       error: userError,

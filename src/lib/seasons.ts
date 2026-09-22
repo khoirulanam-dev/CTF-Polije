@@ -33,7 +33,12 @@ export async function getActiveSeason(): Promise<Season | null> {
 export async function getPublicSeasons(): Promise<Season[]> {
   try {
     if (typeof window !== 'undefined') {
-      const res = await fetch('/api/seasons')
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/seasons', {
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : undefined,
+      })
       if (res.ok) {
         const json = await res.json()
         if (json.seasons) return json.seasons as Season[]
