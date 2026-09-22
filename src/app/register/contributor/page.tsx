@@ -11,6 +11,7 @@ import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import Loader from "@/components/custom/loading";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 import TurnstileWidget from "@/components/TurnstileWidget";
+import PasswordRequirements from "@/components/PasswordRequirements";
 
 export default function ContributorRegisterPage() {
   const router = useRouter();
@@ -33,6 +34,9 @@ export default function ContributorRegisterPage() {
   const updateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+
+  const passwordIsValid = !validatePassword(form.password);
+  const confirmationIsValid = !validatePassword(form.confirmPassword);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,6 +135,11 @@ export default function ContributorRegisterPage() {
               autoComplete="new-password"
               className="w-full rounded-xl border border-white/5 bg-slate-950/40 px-4 py-3 text-sm outline-none focus:border-blue-400/80 focus:ring-2 focus:ring-blue-400/40"
             />
+
+            {!passwordIsValid && (
+              <PasswordRequirements password={form.password} />
+            )}
+
             <input
               required
               type="password"
@@ -142,6 +151,25 @@ export default function ContributorRegisterPage() {
               autoComplete="new-password"
               className="w-full rounded-xl border border-white/5 bg-slate-950/40 px-4 py-3 text-sm outline-none focus:border-blue-400/80 focus:ring-2 focus:ring-blue-400/40"
             />
+
+            {form.confirmPassword && (
+              <p
+                aria-live="polite"
+                className={
+                  form.password === form.confirmPassword
+                    ? "text-xs text-emerald-300"
+                    : "text-xs text-red-300"
+                }
+              >
+                {form.password === form.confirmPassword
+                  ? "✓ Password cocok"
+                  : "✕ Password belum sama"}
+              </p>
+            )}
+
+            {passwordIsValid && !confirmationIsValid && (
+              <PasswordRequirements password={form.confirmPassword} />
+            )}
 
             <TurnstileWidget
               onVerify={setCaptchaToken}

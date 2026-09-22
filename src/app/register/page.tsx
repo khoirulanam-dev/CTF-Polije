@@ -14,6 +14,7 @@ import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 import { validatePassword } from "@/lib/password";
 import TurnstileWidget from "@/components/TurnstileWidget";
+import PasswordRequirements from "@/components/PasswordRequirements";
 
 
 export default function RegisterPage() {
@@ -100,6 +101,9 @@ export default function RegisterPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  const passwordIsValid = !validatePassword(formData.password);
+  const confirmationIsValid = !validatePassword(formData.confirmPassword);
 
   if (authLoading) {
     return <Loader fullscreen color="text-orange-500" />;
@@ -241,6 +245,10 @@ export default function RegisterPage() {
                   </span>
                 </div>
 
+                {!passwordIsValid && (
+                  <PasswordRequirements password={formData.password} />
+                )}
+
                 {/* confirm password */}
                 <div className="relative">
                   <input
@@ -266,6 +274,25 @@ export default function RegisterPage() {
                     </svg>
                   </span>
                 </div>
+
+                {formData.confirmPassword && (
+                  <p
+                    aria-live="polite"
+                    className={
+                      formData.password === formData.confirmPassword
+                        ? "text-xs text-emerald-300"
+                        : "text-xs text-red-300"
+                    }
+                  >
+                    {formData.password === formData.confirmPassword
+                      ? "✓ Password cocok"
+                      : "✕ Password belum sama"}
+                  </p>
+                )}
+
+                {passwordIsValid && !confirmationIsValid && (
+                  <PasswordRequirements password={formData.confirmPassword} />
+                )}
 
                 {/* 🔑 Team Token */}
                 <div className="relative">
