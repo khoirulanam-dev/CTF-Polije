@@ -29,9 +29,11 @@ export async function POST(request: Request) {
     const client = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL;
+    // Use only the server-side env var — never trust the client-supplied Origin header
+    // because it can be spoofed to redirect users to a phishing domain.
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
     const { error } = await client.auth.resetPasswordForEmail(email, {
-      redirectTo: `${origin || ""}/challenges`,
+      redirectTo: `${siteUrl}/challenges`,
     });
 
     if (error) {

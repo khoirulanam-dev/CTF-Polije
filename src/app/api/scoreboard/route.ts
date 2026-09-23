@@ -18,6 +18,9 @@ export async function GET(req: Request) {
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '100', 10), 1), 1000)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0)
 
+    // Scoreboard reads from multiple tables (solves, users, challenges, etc.).
+    // The anon key is blocked by RLS on these tables, so we use the service role key.
+    // Data exposed here is non-sensitive (username, score, avatar_url only).
     const client = supabaseServiceKey
       ? createClient(supabaseUrl, supabaseServiceKey)
       : createClient(supabaseUrl, supabaseAnonKey)
