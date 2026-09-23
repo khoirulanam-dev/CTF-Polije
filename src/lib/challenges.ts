@@ -83,15 +83,19 @@ export async function getChallenges(
       // First blood sudah terjadi jika total_solves > 0
       const hasFirstBlood = (ch.total_solves || 0) > 0;
 
-      // Mask hint content for non-admins to prevent client-side leakage of locked paid hints
-      let sanitizedHint = ch.hint;
-      if (!userIsAdmin && ch.hint) {
+      // Normalize and mask hints
+      let sanitizedHint: any = null;
+      if (ch.hint) {
         const parsed = parseChallengeHints(ch.hint, ch.points);
-        sanitizedHint = parsed.map(h => ({
-          cost: h.cost,
-          // Free hints (cost === 0) keep their content, paid hints are masked until unlocked
-          content: h.cost === 0 ? h.content : '',
-        }));
+        if (userIsAdmin) {
+          sanitizedHint = parsed;
+        } else {
+          sanitizedHint = parsed.map(h => ({
+            cost: h.cost,
+            // Free hints (cost === 0) keep their content, paid hints are masked until unlocked
+            content: h.cost === 0 ? h.content : '',
+          }));
+        }
       }
 
       return {
@@ -195,10 +199,9 @@ export async function addChallenge(challengeData: {
     if (attachmentError) throw new Error(attachmentError)
 
     let hintValue: any = null;
-    if (Array.isArray(challengeData.hint)) {
-      hintValue = challengeData.hint.length > 0 ? JSON.stringify(challengeData.hint) : null;
-    } else if (typeof challengeData.hint === 'string' && challengeData.hint.trim() !== '') {
-      hintValue = JSON.stringify([challengeData.hint]);
+    if (challengeData.hint) {
+      const parsed = parseChallengeHints(challengeData.hint, challengeData.points || 100);
+      hintValue = parsed.length > 0 ? JSON.stringify(parsed) : null;
     }
     const { error } = await supabase.rpc('add_challenge', {
       p_title: challengeData.title,
@@ -282,10 +285,9 @@ export async function updateChallenge(challengeId: string, challengeData: {
     if (attachmentError) throw new Error(attachmentError)
 
     let hintValue: any = null;
-    if (Array.isArray(challengeData.hint)) {
-      hintValue = challengeData.hint.length > 0 ? JSON.stringify(challengeData.hint) : null;
-    } else if (typeof challengeData.hint === 'string' && challengeData.hint.trim() !== '') {
-      hintValue = JSON.stringify([challengeData.hint]);
+    if (challengeData.hint) {
+      const parsed = parseChallengeHints(challengeData.hint, challengeData.points || 100);
+      hintValue = parsed.length > 0 ? JSON.stringify(parsed) : null;
     }
     const { error } = await supabase.rpc('update_challenge', {
       p_challenge_id: challengeId,

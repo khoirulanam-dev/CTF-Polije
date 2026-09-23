@@ -14,7 +14,16 @@ export function parseChallengeHints(raw: any, challengePoints: number = 100): Ch
     arr = raw;
   } else if (typeof raw === 'string') {
     try {
-      const parsed = JSON.parse(raw);
+      let parsed = JSON.parse(raw);
+      // Unwrap recursively if double/triple stringified
+      while (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          break;
+        }
+      }
+
       if (Array.isArray(parsed)) {
         arr = parsed;
       } else if (typeof parsed === 'object' && parsed !== null) {
@@ -34,6 +43,53 @@ export function parseChallengeHints(raw: any, challengePoints: number = 100): Ch
       if (typeof item === 'string') {
         const trimmed = item.trim();
         if (!trimmed) return null;
+
+        // Jika string ini sebenarnya adalah JSON array/object yang belum ter-parse
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            let nested = JSON.parse(trimmed);
+            while (typeof nested === 'string') {
+              try {
+                nested = JSON.parse(nested);
+              } catch {
+                break;
+              }
+            }
+
+            if (Array.isArray(nested) && nested.length > 0) {
+              const target = nested[idx] || nested[0];
+              if (typeof target === 'object' && target !== null) {
+                const content = String(target.content || target.text || target.hint || '').trim();
+                const rawCost = (target as any).cost;
+                const parsedCost = Number(rawCost);
+                const hasCost = rawCost !== undefined && !isNaN(parsedCost);
+                if (!content && !hasCost) return null;
+                return {
+                  content,
+                  cost: isNaN(parsedCost) || parsedCost < 0 ? 0 : Math.round(parsedCost),
+                };
+              }
+              if (typeof target === 'string' && target.trim()) {
+                return {
+                  content: target.trim(),
+                  cost: Math.round(baseCost * (1 + idx * 0.5)),
+                };
+              }
+            } else if (typeof nested === 'object' && nested !== null) {
+              const content = String(nested.content || nested.text || nested.hint || '').trim();
+              const rawCost = (nested as any).cost;
+              const parsedCost = Number(rawCost);
+              const hasCost = rawCost !== undefined && !isNaN(parsedCost);
+              if (content || hasCost) {
+                return {
+                  content,
+                  cost: isNaN(parsedCost) || parsedCost < 0 ? 0 : Math.round(parsedCost),
+                };
+              }
+            }
+          } catch {}
+        }
+
         return {
           content: trimmed,
           cost: Math.round(baseCost * (1 + idx * 0.5)),
@@ -41,9 +97,24 @@ export function parseChallengeHints(raw: any, challengePoints: number = 100): Ch
       }
 
       if (typeof item === 'object' && item !== null) {
-        const content = String(item.content || item.text || item.hint || '').trim();
-        if (!content) return null;
-        const parsedCost = Number(item.cost);
+        let content = String(item.content || item.text || item.hint || '').trim();
+        const rawCost = (item as any).cost;
+        const parsedCost = Number(rawCost);
+        const hasCost = rawCost !== undefined && !isNaN(parsedCost);
+
+        // Jika content kosong dan sama sekali tidak ada properti cost, barulah invalid
+        if (!content && !hasCost) return null;
+
+        // Cek jika field content sendiri berisi JSON string
+        if (content && ((content.startsWith('{') && content.endsWith('}')) || (content.startsWith('[') && content.endsWith(']')))) {
+          try {
+            const inner = JSON.parse(content);
+            if (typeof inner === 'object' && inner !== null && !Array.isArray(inner) && (inner.content || inner.text)) {
+              content = String(inner.content || inner.text || '').trim();
+            }
+          } catch {}
+        }
+
         const cost = isNaN(parsedCost) || parsedCost < 0 ? 0 : Math.round(parsedCost);
         return {
           content,

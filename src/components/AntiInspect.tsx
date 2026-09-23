@@ -12,13 +12,14 @@ export default function AntiInspect() {
     // 2. Blokir Shortcut: F12, Ctrl+C, Windows+V, Ctrl+U, Ctrl+Shift+I/J/C, Ctrl+S
     const handleKeyDown = (e: KeyboardEvent) => {
       // F12
+      if (!e || !e.key) return
       if (e.key === 'F12') {
         e.preventDefault()
         return
       }
 
       const isCtrlOrCmd = e.ctrlKey || e.metaKey
-      const key = e.key.toLowerCase()
+      const key = (e.key || '').toLowerCase()
 
       // Blokir Windows + V (Clipboard History Windows)
       const isWinOrMeta = e.metaKey || (typeof e.getModifierState === 'function' && e.getModifierState('OS'))

@@ -41,8 +41,19 @@ BEGIN
             v_hint_json := jsonb_build_array(v_hint_raw);
         END;
 
-        IF jsonb_typeof(v_hint_json) <> 'array' THEN
+        -- Un-nest secara rekursif jika string JSON ter-encode berlapis (double-stringified)
+        WHILE jsonb_typeof(v_hint_json) = 'string' LOOP
+            BEGIN
+                v_hint_json := (v_hint_json #>> '{}')::jsonb;
+            EXCEPTION WHEN OTHERS THEN
+                EXIT;
+            END;
+        END LOOP;
+
+        IF jsonb_typeof(v_hint_json) = 'object' THEN
             v_hint_json := jsonb_build_array(v_hint_json);
+        ELSIF jsonb_typeof(v_hint_json) <> 'array' THEN
+            v_hint_json := jsonb_build_array(v_hint_raw);
         END IF;
     END IF;
 
@@ -56,6 +67,12 @@ BEGIN
                 CASE 
                     WHEN jsonb_typeof(v_hint_json -> uh.hint_idx) = 'object' THEN
                         COALESCE((v_hint_json -> uh.hint_idx)->>'content', (v_hint_json -> uh.hint_idx)->>'text', (v_hint_json -> uh.hint_idx)->>'hint', '')
+                    WHEN jsonb_typeof(v_hint_json -> uh.hint_idx) = 'string' AND ((v_hint_json -> uh.hint_idx)#>>'{}') ~ '^\s*\{' THEN
+                        COALESCE(
+                            (((v_hint_json -> uh.hint_idx)#>>'{}')::jsonb)->>'content',
+                            (((v_hint_json -> uh.hint_idx)#>>'{}')::jsonb)->>'text',
+                            (v_hint_json -> uh.hint_idx)#>>'{}'
+                        )
                     ELSE
                         trim(both '"' from (v_hint_json -> uh.hint_idx)::text)
                 END
@@ -119,8 +136,19 @@ BEGIN
         v_hint_json := jsonb_build_array(v_hint_raw);
     END;
 
-    IF jsonb_typeof(v_hint_json) <> 'array' THEN
+    -- Un-nest secara rekursif jika string JSON ter-encode berlapis (double-stringified)
+    WHILE jsonb_typeof(v_hint_json) = 'string' LOOP
+        BEGIN
+            v_hint_json := (v_hint_json #>> '{}')::jsonb;
+        EXCEPTION WHEN OTHERS THEN
+            EXIT;
+        END;
+    END LOOP;
+
+    IF jsonb_typeof(v_hint_json) = 'object' THEN
         v_hint_json := jsonb_build_array(v_hint_json);
+    ELSIF jsonb_typeof(v_hint_json) <> 'array' THEN
+        v_hint_json := jsonb_build_array(v_hint_raw);
     END IF;
 
     -- Validasi batas indeks
@@ -129,6 +157,15 @@ BEGIN
     END IF;
 
     v_item := v_hint_json -> p_hint_idx;
+
+    -- Jika v_item sendiri berupa string JSON yang memuat object
+    IF jsonb_typeof(v_item) = 'string' AND (v_item #>> '{}') ~ '^\s*\{' THEN
+        BEGIN
+            v_item := (v_item #>> '{}')::jsonb;
+        EXCEPTION WHEN OTHERS THEN
+            NULL;
+        END;
+    END IF;
 
     -- 2. Tentukan biaya (cost) dan isi teks (content) secara otoritatif dari server
     IF jsonb_typeof(v_item) = 'object' THEN

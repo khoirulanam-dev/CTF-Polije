@@ -129,13 +129,40 @@ const HintDialog: React.FC<HintDialogProps> = ({
                 </span>
               </div>
               <div className="bg-[#35355e] dark:bg-gray-800 border border-[#35355e] dark:border-gray-700 rounded-lg p-4">
-                {(unlockedContents[hintIdx] || currentHint.content) ? (
-                  <div className="text-gray-200 dark:text-gray-100 leading-relaxed whitespace-pre-wrap text-sm">
-                    {unlockedContents[hintIdx] || currentHint.content}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 italic text-sm">Tidak ada petunjuk tersedia.</p>
-                )}
+                {(() => {
+                  const rawDisplayed = unlockedContents[hintIdx] || currentHint.content || '';
+                  if (!rawDisplayed) return <p className="text-gray-400 italic text-sm">Tidak ada petunjuk tersedia.</p>;
+
+                  const trimmed = rawDisplayed.trim();
+                  let contentToShow = rawDisplayed;
+
+                  if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+                    try {
+                      let parsed = JSON.parse(trimmed);
+                      while (typeof parsed === 'string') {
+                        try {
+                          parsed = JSON.parse(parsed);
+                        } catch {
+                          break;
+                        }
+                      }
+                      if (Array.isArray(parsed) && parsed.length > 0) {
+                        const item = parsed[hintIdx] || parsed[0];
+                        contentToShow = typeof item === 'object' && item !== null
+                          ? String(item.content || item.text || item.hint || '')
+                          : String(item);
+                      } else if (typeof parsed === 'object' && parsed !== null) {
+                        contentToShow = String(parsed.content || parsed.text || parsed.hint || trimmed);
+                      }
+                    } catch {}
+                  }
+
+                  return (
+                    <div className="text-gray-200 dark:text-gray-100 leading-relaxed whitespace-pre-wrap text-sm">
+                      {contentToShow}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ) : (
