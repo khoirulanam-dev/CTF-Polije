@@ -26,7 +26,7 @@ interface ChallengeFormDialogProps {
   onSubmit: (e?: React.FormEvent) => void
   onChange: (data: any) => void
   onAddHint: () => void
-  onUpdateHint: (i: number, v: string) => void
+  onUpdateHint: (i: number, field: 'content' | 'cost', v: any) => void
   onRemoveHint: (i: number) => void
   onAddAttachment: () => void
   onUpdateAttachment: (i: number, field: keyof Attachment, v: string) => void
@@ -352,17 +352,89 @@ const ChallengeFormDialog: React.FC<ChallengeFormDialogProps> = ({
             </div>
             <div className="md:col-span-2">
               <div className="flex items-center justify-between">
-                <Label>Hints</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={onAddHint}>+ Add</Button>
+                <Label>Hints (Petunjuk)</Label>
+                <Button type="button" variant="ghost" size="sm" onClick={onAddHint}>+ Add Hint</Button>
               </div>
-              {formData.hint.length === 0 && <p className="text-xs text-muted-foreground">No hints added</p>}
-              <div className="space-y-2 mt-2">
-                {formData.hint.map((h: string, idx: number) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Input value={h} onChange={e => onUpdateHint(idx, e.target.value)} />
-                    <Button type="button" variant="ghost" onClick={() => onRemoveHint(idx)}>✕</Button>
-                  </div>
-                ))}
+              {(!formData.hint || formData.hint.length === 0) && (
+                <p className="text-xs text-muted-foreground mt-1">Belum ada petunjuk (hints) ditambahkan</p>
+              )}
+              <div className="space-y-3 mt-2">
+                {(formData.hint || []).map((h: any, idx: number) => {
+                  const content = typeof h === 'string' ? h : (h?.content || '')
+                  const cost = typeof h === 'string' ? 10 : (h?.cost ?? 0)
+                  const isFree = cost === 0
+                  return (
+                    <div key={idx} className="p-3 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50/70 dark:bg-gray-800/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          Hint #{idx + 1}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRemoveHint(idx)}
+                          className="text-red-500 hover:text-red-600 h-6 px-2 text-xs"
+                        >
+                          ✕ Hapus
+                        </Button>
+                      </div>
+                      <Input
+                        placeholder={`Isi petunjuk #${idx + 1}...`}
+                        value={content}
+                        onChange={e => onUpdateHint(idx, 'content', e.target.value)}
+                        className="bg-white dark:bg-gray-800 text-xs"
+                      />
+                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs text-gray-500 dark:text-gray-400">Tipe:</Label>
+                          <div className="flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden text-xs">
+                            <button
+                              type="button"
+                              className={`px-2.5 py-1 font-medium transition ${
+                                isFree
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              }`}
+                              onClick={() => onUpdateHint(idx, 'cost', 0)}
+                            >
+                              Gratis (0 pts)
+                            </button>
+                            <button
+                              type="button"
+                              className={`px-2.5 py-1 font-medium transition ${
+                                !isFree
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              }`}
+                              onClick={() => onUpdateHint(idx, 'cost', cost > 0 ? cost : 10)}
+                            >
+                              Berbayar
+                            </button>
+                          </div>
+                        </div>
+
+                        {!isFree && (
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-gray-500 dark:text-gray-400">Biaya Poin:</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={cost || ''}
+                              onChange={e => {
+                                const val = Math.max(1, parseInt(e.target.value) || 0)
+                                onUpdateHint(idx, 'cost', val)
+                              }}
+                              placeholder="Poin"
+                              className="w-24 h-8 text-xs bg-white dark:bg-gray-800"
+                            />
+                            <span className="text-[11px] text-gray-400 font-mono">(Admin bebas tentukan poin)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
             <div className="md:col-span-2">

@@ -1,8 +1,9 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChallengeWithSolve } from "@/types";
-import { getUnlockedHints, unlockHint } from "@/lib/challenges";
+import { getUnlockedHintsData, unlockHint } from "@/lib/challenges";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUserDetail } from "@/lib/users";
+import { parseChallengeHints, ChallengeHintItem } from "@/lib/hints";
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 
@@ -23,28 +24,31 @@ const HintDialog: React.FC<HintDialogProps> = ({
 }) => {
   const { user } = useAuth();
   const [unlockedList, setUnlockedList] = useState<number[]>([]);
+  const [unlockedContents, setUnlockedContents] = useState<Record<number, string>>({});
   const [userScore, setUserScore] = useState<number | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const hints: string[] = Array.isArray(challenge?.hint) ? challenge!.hint : [];
-
-  // Hitung biaya per masing-masing hint secara terpisah:
-  // Hint 1 = base, Hint 2 = base * 1.5, Hint 3 = base * 2
-  const challengePoints = challenge?.points || 100;
-  const baseCost = Math.max(10, Math.min(50, Math.round(challengePoints * 0.1)));
-  const hintCost = Math.round(baseCost * (1 + hintIdx * 0.5));
+  const hints: ChallengeHintItem[] = parseChallengeHints(challenge?.hint, challenge?.points);
+  const currentHint: ChallengeHintItem | undefined = hints[hintIdx];
+  const hintCost = currentHint?.cost ?? 0;
+  const isFree = hintCost === 0;
 
   useEffect(() => {
     if (!open || !challenge) return;
     setLoading(true);
 
     Promise.all([
-      getUnlockedHints(challenge.id),
+      getUnlockedHintsData(challenge.id),
       user?.id ? getUserDetail(user.id) : Promise.resolve(null),
     ])
-      .then(([list, detail]) => {
-        setUnlockedList(list);
+      .then(([hintsData, detail]) => {
+        setUnlockedList(hintsData.map(h => h.hint_idx));
+        const contentsMap: Record<number, string> = {};
+        hintsData.forEach(h => {
+          if (h.content) contentsMap[h.hint_idx] = h.content;
+        });
+        setUnlockedContents(prev => ({ ...prev, ...contentsMap }));
         if (detail) {
           setUserScore(detail.score ?? 0);
         }
@@ -57,10 +61,10 @@ const HintDialog: React.FC<HintDialogProps> = ({
       });
   }, [open, challenge, hintIdx, user?.id]);
 
-  if (!challenge) return null;
+  if (!challenge || !currentHint) return null;
 
   const isUnlocked = unlockedList.includes(hintIdx);
-  const hasInsufficientPoints = userScore !== null && hintCost > 0 && userScore < hintCost;
+  const hasInsufficientPoints = !isFree && userScore !== null && userScore < hintCost;
 
   const handleUnlock = async () => {
     if (hasInsufficientPoints) {
@@ -72,9 +76,17 @@ const HintDialog: React.FC<HintDialogProps> = ({
     try {
       const res = await unlockHint(challenge.id, hintIdx, hintCost);
       if (res.success) {
-        toast.success(res.message || `Hint #${hintIdx + 1} berhasil dibuka (-${hintCost} pts)`);
+        toast.success(
+          res.message ||
+            (isFree
+              ? `Hint #${hintIdx + 1} berhasil dibuka!`
+              : `Hint #${hintIdx + 1} berhasil dibuka (-${hintCost} pts)`)
+        );
         setUnlockedList((prev) => Array.from(new Set([...prev, hintIdx])));
-        if (userScore !== null) {
+        if (res.content) {
+          setUnlockedContents(prev => ({ ...prev, [hintIdx]: res.content! }));
+        }
+        if (!isFree && userScore !== null) {
           setUserScore(Math.max(0, userScore - hintCost));
         }
         onHintUnlocked?.(hintIdx);
@@ -97,7 +109,7 @@ const HintDialog: React.FC<HintDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-pink-300 dark:text-pink-200 text-lg">
             <span className="w-8 h-8 bg-blue-200 dark:bg-blue-900 rounded-full flex items-center justify-center">
-              {isUnlocked ? "💡" : "🔒"}
+              {isUnlocked ? "💡" : isFree ? "🎁" : "🔒"}
             </span>
             Hint {hints.length > 1 ? `#${hintIdx + 1}` : ""}: {challenge.title}
           </DialogTitle>
@@ -112,12 +124,14 @@ const HintDialog: React.FC<HintDialogProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-green-400 bg-green-950/40 border border-green-800/60 px-3 py-1.5 rounded">
                 <span>✓ Hint #{hintIdx + 1} Terbuka</span>
-                <span className="text-gray-400">Poin terpotong: -{hintCost} pts</span>
+                <span className="text-gray-400">
+                  {isFree ? "Gratis (0 pts)" : `Poin terpotong: -${hintCost} pts`}
+                </span>
               </div>
               <div className="bg-[#35355e] dark:bg-gray-800 border border-[#35355e] dark:border-gray-700 rounded-lg p-4">
-                {hints[hintIdx] ? (
+                {(unlockedContents[hintIdx] || currentHint.content) ? (
                   <div className="text-gray-200 dark:text-gray-100 leading-relaxed whitespace-pre-wrap text-sm">
-                    {hints[hintIdx]}
+                    {unlockedContents[hintIdx] || currentHint.content}
                   </div>
                 ) : (
                   <p className="text-gray-400 italic text-sm">Tidak ada petunjuk tersedia.</p>
@@ -126,18 +140,28 @@ const HintDialog: React.FC<HintDialogProps> = ({
             </div>
           ) : (
             <div className="space-y-4 text-center py-2">
-              <div className="mx-auto w-12 h-12 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-2xl text-yellow-400">
-                🔒
+              <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center text-2xl ${
+                isFree
+                  ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+                  : "bg-yellow-500/10 border border-yellow-500/30 text-yellow-400"
+              }`}>
+                {isFree ? "🎁" : "🔒"}
               </div>
               <div>
                 <h4 className="text-base font-bold text-white">
-                  Hint #{hintIdx + 1} Masih Terkunci
+                  Hint #{hintIdx + 1} {isFree ? "(Gratis)" : "Masih Terkunci"}
                 </h4>
-                <p className="text-xs text-gray-300 mt-1.5 max-w-sm mx-auto leading-relaxed">
-                  Setiap hint memiliki biaya poin terpisah. Membuka{" "}
-                  <span className="text-yellow-400 font-bold">Hint #{hintIdx + 1}</span> akan mengurangi skor Anda sebesar{" "}
-                  <span className="text-yellow-400 font-bold">{hintCost} poin</span> pada leaderboard.
-                </p>
+                {isFree ? (
+                  <p className="text-xs text-emerald-300 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                    Petunjuk ini disediakan secara <strong className="text-white font-bold">GRATIS</strong> oleh pembuat soal. Membuka petunjuk ini tidak akan memotong skor Anda.
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-300 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                    Petunjuk ini bertipe berbayar. Membuka{" "}
+                    <span className="text-yellow-400 font-bold">Hint #{hintIdx + 1}</span> akan mengurangi skor Anda sebesar{" "}
+                    <span className="text-yellow-400 font-bold">{hintCost} poin</span> pada leaderboard.
+                  </p>
+                )}
               </div>
 
               {/* Status Poin User */}
@@ -172,12 +196,18 @@ const HintDialog: React.FC<HintDialogProps> = ({
                   type="button"
                   onClick={handleUnlock}
                   disabled={unlocking || hasInsufficientPoints}
-                  className="px-5 py-2 text-xs rounded bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-950 font-bold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`px-5 py-2 text-xs rounded font-bold shadow transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isFree
+                      ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950"
+                      : "bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-950"
+                  }`}
                 >
                   {unlocking
                     ? "Membuka..."
                     : hasInsufficientPoints
                     ? "Poin Tidak Cukup"
+                    : isFree
+                    ? `Buka Hint Gratis (0 pts)`
                     : `Buka Hint #${hintIdx + 1} (-${hintCost} Pts)`}
                 </button>
               </div>

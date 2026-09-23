@@ -28,32 +28,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import { usePresence } from "@/contexts/PresenceContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
+import { parseChallengeHints } from "@/lib/hints";
 
 // Helper untuk normalisasi field hint
 function normalizeChallengesList(challengesData: any[]): ChallengeWithSolve[] {
   return challengesData.map((challenge: any) => {
-    let hints: string[] = [];
-    const raw = challenge.hint;
-    if (Array.isArray(raw)) {
-      hints = raw.filter((h: any) => typeof h === "string");
-    } else if (typeof raw === "string") {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          hints = parsed.filter((h: any) => typeof h === "string");
-        } else if (typeof parsed === "string") {
-          hints = [parsed];
-        } else if (parsed === null) {
-          hints = [];
-        }
-      } catch {
-        if (raw.trim() !== "") hints = [raw];
-      }
-    } else if (raw && typeof raw === "object") {
-      // skip
-    } else if (raw) {
-      hints = [String(raw)];
-    }
+    const hints = parseChallengeHints(challenge.hint, challenge.points);
     return { ...challenge, hint: hints };
   });
 }
@@ -84,10 +64,30 @@ export default function ChallengesPage() {
     [key: string]: { success: boolean; message: string } | null;
   }>({});
   const [submitting, setSubmitting] = useState<{ [key: string]: boolean }>({});
+  const [cooldowns, setCooldowns] = useState<{ [key: string]: number }>({});
+  const [wrongAttempts, setWrongAttempts] = useState<{ [key: string]: number }>({});
   const [showHintModal, setShowHintModal] = useState<{
     challenge: ChallengeWithSolve | null;
     hintIdx?: number;
   }>({ challenge: null });
+
+  // Countdown timer untuk cooldown submit flag
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCooldowns((prev) => {
+        let changed = false;
+        const next: { [key: string]: number } = {};
+        for (const [id, sec] of Object.entries(prev)) {
+          if (sec > 0) {
+            next[id] = sec - 1;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [downloading, setDownloading] = useState<{ [key: string]: boolean }>(
     {}
   );
@@ -308,6 +308,13 @@ export default function ChallengesPage() {
   const handleFlagSubmit = async (challengeId: string) => {
     if (!user || !flagInputs[challengeId]?.trim()) return;
 
+    // Cegah submit jika cooldown masih aktif
+    const remaining = cooldowns[challengeId] || 0;
+    if (remaining > 0) {
+      toast.error(`Cooldown aktif! Coba lagi dalam ${remaining} detik.`);
+      return;
+    }
+
     setSubmitting((prev) => ({ ...prev, [challengeId]: true }));
     setFlagFeedback((prev) => ({ ...prev, [challengeId]: null }));
 
@@ -317,12 +324,16 @@ export default function ChallengesPage() {
         flagInputs[challengeId].trim()
       );
 
-      setFlagFeedback((prev) => ({
-        ...prev,
-        [challengeId]: { success: result.success, message: result.message },
-      }));
-
       if (result.success) {
+        // Reset wrong attempts & cooldown
+        setWrongAttempts((prev) => ({ ...prev, [challengeId]: 0 }));
+        setCooldowns((prev) => ({ ...prev, [challengeId]: 0 }));
+
+        setFlagFeedback((prev) => ({
+          ...prev,
+          [challengeId]: { success: true, message: result.message },
+        }));
+
         // Optimistic UI update: langsung tandai solve di state
         setChallenges((prev) =>
           prev.map((c) =>
@@ -369,6 +380,20 @@ export default function ChallengesPage() {
 
         // Refresh data di background untuk sinkronisasi poin & tetap di season yang sedang dilihat
         fetchChallengesData();
+      } else {
+        // Flag salah: aktifkan cooldown bertingkat (5s, 10s, 20s, max 60s)
+        const attempts = (wrongAttempts[challengeId] || 0) + 1;
+        setWrongAttempts((prev) => ({ ...prev, [challengeId]: attempts }));
+        const cooldownSec = Math.min(60, attempts === 1 ? 5 : attempts === 2 ? 10 : attempts === 3 ? 20 : 30);
+        setCooldowns((prev) => ({ ...prev, [challengeId]: cooldownSec }));
+
+        setFlagFeedback((prev) => ({
+          ...prev,
+          [challengeId]: {
+            success: false,
+            message: `${result.message || "Flag salah!"} Cooldown ${cooldownSec} detik sebelum mencoba lagi.`,
+          },
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -1209,6 +1234,7 @@ export default function ChallengesPage() {
           downloadFile={downloadFile}
           showHintModal={showHintModal}
           setShowHintModal={setShowHintModal}
+          cooldownRemaining={selectedChallenge ? (cooldowns[selectedChallenge.id] || 0) : 0}
         />
       )}
       </div>

@@ -34,6 +34,40 @@ async function verifyContributor(req: Request) {
   return { authorized: true, user: userProfile, userId: authData.user.id, adminClient }
 }
 
+function validateContributorHints(hints: any): { valid: boolean; error?: string; normalized?: any[] } {
+  if (!hints) {
+    return { valid: true, normalized: [] }
+  }
+  if (!Array.isArray(hints)) {
+    return { valid: false, error: 'Format hint harus berupa array' }
+  }
+  const normalized: any[] = []
+  for (let i = 0; i < hints.length; i++) {
+    const item = hints[i]
+    let content = ''
+    let cost = 0
+    if (typeof item === 'string') {
+      content = item.trim()
+      cost = 10
+    } else if (typeof item === 'object' && item !== null) {
+      content = String(item.content || item.text || item.hint || '').trim()
+      const parsedCost = Number(item.cost)
+      cost = isNaN(parsedCost) || parsedCost < 0 ? 0 : Math.round(parsedCost)
+    }
+    if (!content) continue
+
+    // Validasi aturan: Gratis = 0, Berbayar = 1 - 50 poin
+    if (cost < 0) {
+      return { valid: false, error: `Hint #${i + 1} tidak boleh bernilai poin negatif.` }
+    }
+    if (cost > 50) {
+      return { valid: false, error: `Hint #${i + 1} (${cost} poin) melebihi batas maksimal! Biaya hint untuk kontributor maksimal 50 poin.` }
+    }
+    normalized.push({ content, cost })
+  }
+  return { valid: true, normalized }
+}
+
 // GET: Ambil daftar soal yang dibuat oleh kontributor ini
 export async function GET(req: Request) {
   try {
@@ -151,6 +185,12 @@ export async function POST(req: Request) {
       }, { status: 400 })
     }
 
+    // 3. Validasi Hint untuk Kontributor (Gratis atau Berbayar 1-50 poin)
+    const hintValidation = validateContributorHints(hint)
+    if (!hintValidation.valid) {
+      return NextResponse.json({ error: hintValidation.error }, { status: 400 })
+    }
+
     // Siapkan hash flag
     const flagHash = crypto.createHash('sha256').update(cleanFlag).digest('hex')
 
@@ -162,7 +202,7 @@ export async function POST(req: Request) {
       points: Number(points) || 100,
       max_points: max_points ? Number(max_points) : (is_dynamic ? Number(points) : null),
       difficulty: difficulty || 'Medium',
-      hint: hint && hint.length > 0 ? hint : null,
+      hint: hintValidation.normalized && hintValidation.normalized.length > 0 ? hintValidation.normalized : null,
       attachments: attachments || [],
       is_dynamic: Boolean(is_dynamic),
       min_points: min_points ? Number(min_points) : 0,
@@ -296,8 +336,14 @@ export async function PUT(req: Request) {
     if (updates.points !== undefined) updatePayload.points = Number(updates.points)
     if (updates.max_points !== undefined) updatePayload.max_points = Number(updates.max_points)
     if (updates.difficulty) updatePayload.difficulty = updates.difficulty
-    if (updates.hint !== undefined) updatePayload.hint = updates.hint
     if (updates.attachments !== undefined) updatePayload.attachments = updates.attachments
+    if (updates.hint !== undefined) {
+      const hintValidation = validateContributorHints(updates.hint)
+      if (!hintValidation.valid) {
+        return NextResponse.json({ error: hintValidation.error }, { status: 400 })
+      }
+      updatePayload.hint = hintValidation.normalized && hintValidation.normalized.length > 0 ? hintValidation.normalized : null
+    }
     if (updates.is_dynamic !== undefined) updatePayload.is_dynamic = Boolean(updates.is_dynamic)
     if (updates.min_points !== undefined) updatePayload.min_points = Number(updates.min_points)
     if (updates.decay_per_solve !== undefined) updatePayload.decay_per_solve = Number(updates.decay_per_solve)

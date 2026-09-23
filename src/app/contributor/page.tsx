@@ -22,8 +22,8 @@ import { Switch } from '@/components/ui/switch'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import DifficultyBadge from '@/components/custom/DifficultyBadge'
 import CustomBadge from '@/components/ui/CustomBadge'
-import APP from '@/config'
 import { Season, Attachment } from '@/types'
+import { parseChallengeHints, ChallengeHintItem, validateHintCost } from '@/lib/hints'
 
 const CATEGORIES = ['Web Exploitation', 'Cryptography', 'Forensics', 'Reverse Engineering', 'Binary Exploitation', 'OSINT', 'Misc', 'Intro']
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard', 'Impossible']
@@ -69,7 +69,7 @@ export default function ContributorPage() {
     min_points: '' as number | '',
     decay_per_solve: '' as number | '',
     season_id: '',
-    hint: [] as string[],
+    hint: [] as ChallengeHintItem[],
     attachments: [] as Attachment[],
   })
 
@@ -186,7 +186,7 @@ export default function ContributorPage() {
       min_points: '',
       decay_per_solve: '',
       season_id: defaultSeason.id,
-      hint: [],
+      hint: [] as ChallengeHintItem[],
       attachments: [],
     })
     setShowPreview(false)
@@ -209,7 +209,7 @@ export default function ContributorPage() {
       min_points: ch.min_points || '',
       decay_per_solve: ch.decay_per_solve || '',
       season_id: ch.season_id || fallbackSeason?.id || '',
-      hint: Array.isArray(ch.hint) ? ch.hint : [],
+      hint: parseChallengeHints(ch.hint, ch.points),
       attachments: ch.attachments || [],
     })
     setShowPreview(false)
@@ -247,6 +247,18 @@ export default function ContributorPage() {
       return
     }
 
+    // 3. Validasi Hint untuk Kontributor (maksimal 50 poin untuk berbayar)
+    const activeHints = formData.hint.filter(h => (h.content || '').trim() !== '')
+
+    for (let i = 0; i < activeHints.length; i++) {
+      const h = activeHints[i]
+      const cost = Number(h.cost) || 0
+      if (cost > 0 && (cost < 1 || cost > 50)) {
+        toast.error(`Hint #${i + 1} berbayar harus bernilai antara 1 sampai 50 poin!`)
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       const { supabase } = await import('@/lib/supabase')
@@ -265,7 +277,10 @@ export default function ContributorPage() {
         min_points: formData.min_points ? Number(formData.min_points) : 0,
         decay_per_solve: formData.decay_per_solve ? Number(formData.decay_per_solve) : 0,
         season_id: formData.season_id,
-        hint: formData.hint.filter(h => h.trim() !== ''),
+        hint: activeHints.map(h => ({
+          content: h.content.trim(),
+          cost: Math.max(0, Math.min(50, Number(h.cost) || 0)),
+        })),
         attachments: formData.attachments.filter(a => a.url?.trim() !== ''),
         flag: cleanFlag,
       }
@@ -737,42 +752,112 @@ export default function ContributorPage() {
                 <Label className="text-xs font-semibold text-slate-300">Hints (Petunjuk Opsional)</Label>
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, hint: [...prev.hint, ''] }))}
+                  onClick={() => setFormData(prev => ({ ...prev, hint: [...(prev.hint || []), { content: '', cost: 0 }] }))}
                   className="text-xs font-semibold text-purple-400 hover:text-purple-300"
                 >
                   + Tambah Hint
                 </button>
               </div>
-              {formData.hint.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">Belum ada hint</p>
+              {(!formData.hint || formData.hint.length === 0) ? (
+                <p className="text-xs text-slate-500 italic">Belum ada petunjuk (hints) ditambahkan</p>
               ) : (
-                <div className="space-y-2 mt-1">
-                  {formData.hint.map((h, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <Input
-                        value={h}
-                        onChange={e => {
-                          const next = [...formData.hint]
-                          next[idx] = e.target.value
-                          setFormData(prev => ({ ...prev, hint: next }))
-                        }}
-                        placeholder={`Hint #${idx + 1}`}
-                        className="bg-slate-950 border-slate-700 text-xs text-white"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const next = formData.hint.filter((_, i) => i !== idx)
-                          setFormData(prev => ({ ...prev, hint: next }))
-                        }}
-                        className="text-slate-400 hover:text-red-400"
-                      >
-                        ✕
-                      </Button>
-                    </div>
-                  ))}
+                <div className="space-y-3 mt-2">
+                  {formData.hint.map((h: any, idx: number) => {
+                    const content = typeof h === 'string' ? h : (h?.content || '')
+                    const cost = typeof h === 'string' ? 10 : (h?.cost ?? 0)
+                    const isFree = cost === 0
+                    return (
+                      <div key={idx} className="p-3 border border-slate-800 rounded-lg bg-slate-950/70 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-purple-300">
+                            Hint #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (formData.hint || []).filter((_: any, i: number) => i !== idx)
+                              setFormData(prev => ({ ...prev, hint: next }))
+                            }}
+                            className="text-xs text-slate-400 hover:text-red-400 transition"
+                          >
+                            ✕ Hapus
+                          </button>
+                        </div>
+                        <Input
+                          value={content}
+                          onChange={e => {
+                            const next = [...formData.hint]
+                            next[idx] = { content: e.target.value, cost }
+                            setFormData(prev => ({ ...prev, hint: next }))
+                          }}
+                          placeholder={`Isi petunjuk (hint) #${idx + 1}...`}
+                          className="bg-slate-900 border-slate-700 text-xs text-white placeholder:text-slate-600"
+                        />
+                        <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-slate-400 font-medium">Tipe:</span>
+                            <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
+                              <button
+                                type="button"
+                                className={`px-2.5 py-1 font-medium transition ${
+                                  isFree
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                                }`}
+                                onClick={() => {
+                                  const next = [...formData.hint]
+                                  next[idx] = { content, cost: 0 }
+                                  setFormData(prev => ({ ...prev, hint: next }))
+                                }}
+                              >
+                                Gratis (0 pts)
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2.5 py-1 font-medium transition ${
+                                  !isFree
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                                }`}
+                                onClick={() => {
+                                  const next = [...formData.hint]
+                                  const defaultCost = cost > 0 && cost <= 50 ? cost : 10
+                                  next[idx] = { content, cost: defaultCost }
+                                  setFormData(prev => ({ ...prev, hint: next }))
+                                }}
+                              >
+                                Berbayar
+                              </button>
+                            </div>
+                          </div>
+
+                          {!isFree && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-400 font-medium">Biaya:</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={cost || ''}
+                                onChange={e => {
+                                  const rawVal = parseInt(e.target.value) || 0
+                                  const clamped = Math.max(1, Math.min(50, rawVal))
+                                  const next = [...formData.hint]
+                                  next[idx] = { content, cost: clamped }
+                                  setFormData(prev => ({ ...prev, hint: next }))
+                                }}
+                                placeholder="1 - 50"
+                                className="w-20 h-7 text-xs bg-slate-900 border-slate-700 text-white"
+                              />
+                              <span className="text-[11px] text-amber-400/80 font-mono">
+                                (1 - 50 poin)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

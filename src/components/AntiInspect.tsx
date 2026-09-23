@@ -21,22 +21,21 @@ export default function AntiInspect() {
       const key = e.key.toLowerCase()
 
       // Blokir Windows + V (Clipboard History Windows)
-      if (e.metaKey && (key === 'v' || e.code === 'KeyV')) {
+      const isWinOrMeta = e.metaKey || (typeof e.getModifierState === 'function' && e.getModifierState('OS'))
+      if (isWinOrMeta && (key === 'v' || e.code === 'KeyV')) {
         e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+
+      // Blokir Ctrl+C / Cmd+C di seluruh dokumen agar konten tidak bisa di-copy
+      if (isCtrlOrCmd && (key === 'c' || e.code === 'KeyC')) {
+        e.preventDefault()
+        e.stopPropagation()
         return
       }
 
       if (isCtrlOrCmd) {
-        // Blokir Ctrl+C / Cmd+C pada teks halaman agar soal tidak bisa di-copy
-        if (key === 'c' && !e.shiftKey) {
-          const target = document.activeElement
-          const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
-          if (!isInput) {
-            e.preventDefault()
-            return
-          }
-        }
-
         // Ctrl+U / Cmd+U (View Source)
         if (key === 'u') {
           e.preventDefault()
@@ -57,22 +56,20 @@ export default function AntiInspect() {
       }
     }
 
-    // 3. Blokir Event Copy pada teks halaman (kecuali di dalam input form)
+    // 3. Blokir Event Copy pada seluruh halaman
     const handleCopy = (e: ClipboardEvent) => {
-      const target = document.activeElement
-      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
-      if (!isInput) {
-        e.preventDefault()
-      }
+      e.preventDefault()
     }
 
     document.addEventListener('contextmenu', handleContextMenu)
-    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
+    document.addEventListener('keyup', handleKeyDown, true)
     document.addEventListener('copy', handleCopy)
 
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu)
-      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('keyup', handleKeyDown, true)
       document.removeEventListener('copy', handleCopy)
     }
   }, [])

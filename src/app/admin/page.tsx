@@ -23,6 +23,7 @@ import { isAdmin } from '@/lib/auth'
 import { getChallenges, addChallenge, updateChallenge, setChallengeActive, deleteChallenge, getFlag, getSolversAll } from '@/lib/challenges'
 import { getInfo } from '@/lib/users'
 import { Challenge, Attachment } from '@/types'
+import { parseChallengeHints, ChallengeHintItem } from '@/lib/hints'
 import APP from '@/config'
 
 export default function AdminPage() {
@@ -33,7 +34,17 @@ export default function AdminPage() {
   const [solvers, setSolvers] = useState<any[]>([])
   const [siteInfo, setSiteInfo] = useState<any | null>(null)
   const [seasons, setSeasons] = useState<any[]>([])
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('all')
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const seasonParam = params.get('season')
+      if (seasonParam) return seasonParam
+      const cached = sessionStorage.getItem('polije_admin_selected_season')
+      if (cached) return cached
+    }
+    return ''
+  })
+  const [isDataLoaded, setIsDataLoaded] = useState(false)
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false)
   const seasonDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -72,7 +83,7 @@ export default function AdminPage() {
     points: 100,
     max_points: 100,
     flag: '',
-    hint: [] as string[],
+    hint: [] as ChallengeHintItem[],
     difficulty: 'Easy',
     attachments: [] as Attachment[],
     is_dynamic: false,
@@ -123,45 +134,64 @@ export default function AdminPage() {
 
       setAuthorized(true)
 
-      // Check URL query for season filter
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search)
-        const seasonParam = params.get('season')
-        if (seasonParam) {
-          setSelectedSeasonId(seasonParam)
-        }
-      }
-
-      const data = await getChallenges(undefined, true)
-      const info = await getInfo()
-      fetchSolvers(0)
-      if (!mounted) return
-      setChallenges(data)
-      setSiteInfo(info)
-
-      // Fetch seasons list
       try {
-        const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
-        const token = session?.access_token || ''
-        const res = await fetch('/api/admin/seasons', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        const sData = await res.json()
-        if (mounted && sData.seasons) {
-          setSeasons(sData.seasons)
+        const { supabase } = await import('@/lib/supabase')
+        const sessionPromise = supabase.auth.getSession()
 
-          // Otomatis arahkan ke season yang sedang aktif (LIVE) jika tidak ada filter manual di URL
-          const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-          const seasonParam = params?.get('season')
-          if (!seasonParam) {
-            const activeSeason = sData.seasons.find((s: any) => s.status === 'active')
-            if (activeSeason) {
-              setSelectedSeasonId(activeSeason.id)
-            }
+        const [challengesData, siteInfoData, sessionRes] = await Promise.all([
+          getChallenges(undefined, true),
+          getInfo(),
+          sessionPromise,
+        ])
+
+        if (!mounted) return
+
+        const token = sessionRes.data?.session?.access_token || ''
+        let seasonsData: any[] = []
+
+        try {
+          const res = await fetch('/api/admin/seasons', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          const sData = await res.json()
+          if (sData.seasons) {
+            seasonsData = sData.seasons
           }
+        } catch (err) {
+          console.warn('Failed to load seasons:', err)
         }
+
+        if (!mounted) return
+
+        // Resolve active or selected season without flash
+        const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+        const seasonParam = params?.get('season')
+        const cachedSeason = typeof window !== 'undefined' ? sessionStorage.getItem('polije_admin_selected_season') : null
+        const activeSeason = seasonsData.find((s: any) => s.status === 'active')
+
+        let targetSeasonId = 'all'
+        if (seasonParam) {
+          targetSeasonId = seasonParam
+        } else if (cachedSeason && (cachedSeason === 'all' || cachedSeason === 'unassigned' || seasonsData.some((s: any) => s.id === cachedSeason))) {
+          targetSeasonId = cachedSeason
+        } else if (activeSeason) {
+          targetSeasonId = activeSeason.id
+        }
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('polije_admin_selected_season', targetSeasonId)
+        }
+
+        // Apply all state changes in a single synchronous batch
+        setSeasons(seasonsData)
+        setSelectedSeasonId(targetSeasonId)
+        setChallenges(challengesData)
+        setSiteInfo(siteInfoData)
+        setIsDataLoaded(true)
+
+        fetchSolvers(0)
       } catch (err) {
-        console.warn('Failed to load seasons:', err)
+        console.error('Error initializing admin data:', err)
       }
     })()
 
@@ -179,24 +209,13 @@ export default function AdminPage() {
   }
 
   const openEdit = (c: Challenge) => {
-    // normalize hint to array
-    let parsedHint: string[] = []
-    if (Array.isArray(c.hint)) parsedHint = c.hint.filter(h => typeof h === 'string')
-    else if (typeof c.hint === 'string' && c.hint.trim() !== '') {
-      try {
-        const arr = JSON.parse(c.hint as unknown as string)
-        if (Array.isArray(arr)) parsedHint = arr.filter(h => typeof h === 'string')
-        else parsedHint = [c.hint as unknown as string]
-      } catch {
-        parsedHint = [c.hint as unknown as string]
-      }
-    }
+    const parsedHint = parseChallengeHints(c.hint, c.points)
 
     setEditing(c)
     setFormData({
       title: c.title,
       description: c.description || '',
-  category: c.category || APP.challengeCategories?.[0] || 'Web',
+      category: c.category || APP.challengeCategories?.[0] || 'Web',
       points: c.points || 100,
       max_points: c.max_points || c.points || 100,
       flag: c.flag || '',
@@ -328,7 +347,7 @@ export default function AdminPage() {
         description: (formData.description || '').trim(),
         category: (formData.category || '').trim(),
         points: Number(formData.points) || 0,
-        hint: (formData.hint && formData.hint.length > 0) ? formData.hint.filter(h => h.trim() !== '') : null,
+        hint: (formData.hint && formData.hint.length > 0) ? formData.hint.filter((h: any) => (h.content || '').trim() !== '') : null,
         difficulty: (formData.difficulty || '').trim(),
         attachments: (formData.attachments || []).filter((a) => (a.url || '').trim() !== ''),
   }
@@ -390,7 +409,7 @@ export default function AdminPage() {
   }
 
   const filteredChallenges = challenges.filter((c) => {
-    if (selectedSeasonId !== 'all') {
+    if (selectedSeasonId && selectedSeasonId !== 'all') {
       if (selectedSeasonId === 'unassigned') {
         if ((c as any).season_id) return false
       } else {
@@ -404,8 +423,11 @@ export default function AdminPage() {
   })
 
   // hint handlers
-  const addHint = () => setFormData(prev => ({ ...prev, hint: [...(prev.hint || []), ''] }))
-  const updateHint = (i: number, v: string) => setFormData(prev => ({ ...prev, hint: prev.hint.map((h, idx) => idx === i ? v : h) }))
+  const addHint = () => setFormData(prev => ({ ...prev, hint: [...(prev.hint || []), { content: '', cost: 0 }] }))
+  const updateHint = (i: number, field: 'content' | 'cost', v: any) => setFormData(prev => ({
+    ...prev,
+    hint: prev.hint.map((h, idx) => idx === i ? { ...h, [field]: v } : h)
+  }))
   const removeHint = (i: number) => setFormData(prev => ({ ...prev, hint: prev.hint.filter((_, idx) => idx !== i) }))
 
   // attachments
@@ -413,7 +435,7 @@ export default function AdminPage() {
   const updateAttachment = (i: number, field: keyof Attachment, v: string) => setFormData(prev => ({ ...prev, attachments: prev.attachments.map((a, idx) => idx === i ? { ...a, [field]: v } : a) }))
   const removeAttachment = (i: number) => setFormData(prev => ({ ...prev, attachments: prev.attachments.filter((_, idx) => idx !== i) }))
 
-  if (loading || authorized === null) return <Loader fullscreen color="text-orange-500" />
+  if (loading || authorized === null || !isDataLoaded) return <Loader fullscreen color="text-orange-500" />
   if (!user) return null
 
   return (
@@ -458,6 +480,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => {
                           setSelectedSeasonId('all');
+                          if (typeof window !== 'undefined') sessionStorage.setItem('polije_admin_selected_season', 'all');
                           setSeasonDropdownOpen(false);
                         }}
                         className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition shrink-0 cursor-pointer ${
@@ -564,6 +587,7 @@ export default function AdminPage() {
                                   type="button"
                                   onClick={() => {
                                     setSelectedSeasonId(s.id);
+                                    if (typeof window !== 'undefined') sessionStorage.setItem('polije_admin_selected_season', s.id);
                                     setSeasonDropdownOpen(false);
                                   }}
                                   className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition cursor-pointer ${

@@ -34,7 +34,7 @@ export interface Challenge {
   max_points?: number
   flag: string
   flag_hash: string
-  hint?: string
+  hint?: any
   attachments?: Attachment[]
   difficulty: string
   is_active: boolean

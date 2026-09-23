@@ -14,6 +14,7 @@ import { getActiveSeason } from './seasons'
 import { isAdmin, getUserRole, getCurrentUser } from './auth'
 import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment, Announcement, AppNotification } from '@/types'
 import { validateAttachments } from './safe-url'
+import { parseChallengeHints } from './hints'
 
 /**
  * Get all challenges
@@ -74,6 +75,7 @@ export async function getChallenges(
 
     const now = Date.now();
     const oneDayMs = 24 * 60 * 60 * 1000;
+    const userIsAdmin = showAll ? true : await isAdmin();
 
     return challenges.map(ch => {
       const createdAt = new Date(ch.created_at);
@@ -81,8 +83,20 @@ export async function getChallenges(
       // First blood sudah terjadi jika total_solves > 0
       const hasFirstBlood = (ch.total_solves || 0) > 0;
 
+      // Mask hint content for non-admins to prevent client-side leakage of locked paid hints
+      let sanitizedHint = ch.hint;
+      if (!userIsAdmin && ch.hint) {
+        const parsed = parseChallengeHints(ch.hint, ch.points);
+        sanitizedHint = parsed.map(h => ({
+          cost: h.cost,
+          // Free hints (cost === 0) keep their content, paid hints are masked until unlocked
+          content: h.cost === 0 ? h.content : '',
+        }));
+      }
+
       return {
         ...ch,
+        hint: sanitizedHint,
         is_solved: solvedIds.has(ch.id),
         has_first_blood: hasFirstBlood,
         is_recently_created: isRecentlyCreated,
@@ -793,10 +807,23 @@ export async function getCombinedNotifications(limit = 100): Promise<AppNotifica
   return list.slice(0, limit);
 }
 
+export interface UnlockedHintItem {
+  hint_idx: number;
+  cost: number;
+  content: string;
+}
+
 /**
- * Unlock hint with point penalty
+ * Unlock hint with authoritative server-side cost verification
  */
-export async function unlockHint(challengeId: string, hintIdx: number, cost = 0) {
+export async function unlockHint(challengeId: string, hintIdx: number, cost = 0): Promise<{
+  success: boolean;
+  message?: string;
+  cost?: number;
+  content?: string;
+  already_unlocked?: boolean;
+  remaining_score?: number;
+}> {
   try {
     const { data, error } = await supabase.rpc('unlock_hint', {
       p_challenge_id: challengeId,
@@ -828,31 +855,50 @@ export async function unlockHint(challengeId: string, hintIdx: number, cost = 0)
 }
 
 /**
- * Get all unlocked hints for current user on a challenge
+ * Get full unlocked hint objects (index, cost, unmasked content) for current user
  */
-export async function getUnlockedHints(challengeId: string): Promise<number[]> {
-  const storageKey = `unlocked_hints_${challengeId}`;
-  let localList: number[] = [];
-  if (typeof window !== 'undefined') {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      localList = saved ? JSON.parse(saved) : [];
-    } catch {}
-  }
-
+export async function getUnlockedHintsData(challengeId: string): Promise<UnlockedHintItem[]> {
   try {
     const { data, error } = await supabase.rpc('get_unlocked_hints', {
       p_challenge_id: challengeId,
     });
-    if (error) return localList;
-    const remoteList: number[] = (data || []).map((h: any) => h.hint_idx);
-    
-    // Sinkronkan cache localStorage dengan data riil dari Supabase
+    if (error) throw error;
+
+    const list: UnlockedHintItem[] = (data || []).map((h: any) => ({
+      hint_idx: Number(h.hint_idx),
+      cost: Number(h.cost || 0),
+      content: String(h.content || ''),
+    }));
+
     if (typeof window !== 'undefined') {
-      localStorage.setItem(storageKey, JSON.stringify(remoteList));
+      const storageKey = `unlocked_hints_${challengeId}`;
+      localStorage.setItem(storageKey, JSON.stringify(list.map(h => h.hint_idx)));
     }
-    return remoteList;
-  } catch {
-    return localList;
+
+    return list;
+  } catch (err) {
+    console.warn('getUnlockedHintsData error:', err);
+    return [];
   }
+}
+
+/**
+ * Get all unlocked hint indices for current user on a challenge (Backwards compatible)
+ */
+export async function getUnlockedHints(challengeId: string): Promise<number[]> {
+  const data = await getUnlockedHintsData(challengeId);
+  if (data && data.length > 0) {
+    return data.map(d => d.hint_idx);
+  }
+
+  // Fallback cache jika offline
+  const storageKey = `unlocked_hints_${challengeId}`;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {}
+  }
+
+  return [];
 }

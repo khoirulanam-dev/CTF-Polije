@@ -10,6 +10,7 @@ import { Attachment, ChallengeWithSolve } from '@/types';
 import { normalizeExternalHttpsUrl } from '@/lib/safe-url';
 import { getUnlockedHints } from '@/lib/challenges';
 import { useAuth } from '@/contexts/AuthContext';
+import { parseChallengeHints } from '@/lib/hints';
 
 interface ChallengeDetailDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ interface ChallengeDetailDialogProps {
   downloadFile: (attachment: Attachment, attachmentKey: string) => void;
   showHintModal: { challenge: ChallengeWithSolve | null, hintIdx?: number };
   setShowHintModal: (modal: { challenge: ChallengeWithSolve | null, hintIdx?: number }) => void;
+  cooldownRemaining?: number;
 }
 
 const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
@@ -45,6 +47,7 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
   downloadFile,
   showHintModal,
   setShowHintModal,
+  cooldownRemaining = 0,
 }) => {
   const [copiedAll, setCopiedAll] = useState<{ [key: string]: boolean }>({});
   const [unlockedHints, setUnlockedHints] = useState<number[]>([]);
@@ -236,35 +239,47 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
             )}
 
             {/* Hint buttons */}
-            {Array.isArray(challenge.hint) && challenge.hint.length > 0 && (
-              <div className="mb-1 flex flex-wrap gap-2">
-                {(challenge.hint ?? []).map((hint: string, idx: number) => {
-                  const isUnlocked = unlockedHints.includes(idx);
-                  const baseCost = Math.max(10, Math.min(50, Math.round((challenge.points || 100) * 0.1)));
-                  const cost = Math.round(baseCost * (1 + idx * 0.5));
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`px-3 py-1.5 rounded font-semibold text-xs transition flex items-center gap-1.5 shadow-sm border ${
-                        isUnlocked
-                          ? "bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30"
-                          : "bg-yellow-500/20 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/30"
-                      }`}
-                      onClick={e => {
-                        e.stopPropagation();
-                        setShowHintModal({ challenge, hintIdx: idx });
-                      }}
-                    >
-                      <span>{isUnlocked ? "✓" : "🔒"} Hint {(challenge.hint?.length ?? 0) > 1 ? `#${idx + 1}` : ''}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${isUnlocked ? "bg-green-400/20 text-green-200" : "bg-yellow-400/20 text-yellow-200"}`}>
-                        {isUnlocked ? "Terbuka" : `-${cost} pts`}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {(() => {
+              const hints = parseChallengeHints(challenge.hint, challenge.points);
+              if (hints.length === 0) return null;
+              return (
+                <div className="mb-1 flex flex-wrap gap-2">
+                  {hints.map((h, idx: number) => {
+                    const isUnlocked = unlockedHints.includes(idx);
+                    const isFree = h.cost === 0;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`px-3 py-1.5 rounded font-semibold text-xs transition flex items-center gap-1.5 shadow-sm border ${
+                          isUnlocked
+                            ? "bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30"
+                            : isFree
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+                            : "bg-yellow-500/20 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/30"
+                        }`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setShowHintModal({ challenge, hintIdx: idx });
+                        }}
+                      >
+                        <span>{isUnlocked ? "✓" : isFree ? "💡" : "🔒"} Hint {hints.length > 1 ? `#${idx + 1}` : ''}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          isUnlocked
+                            ? "bg-green-400/20 text-green-200"
+                            : isFree
+                            ? "bg-emerald-400/20 text-emerald-200"
+                            : "bg-yellow-400/20 text-yellow-200"
+                        }`}>
+                          {isUnlocked ? "Terbuka" : isFree ? "GRATIS" : `-${h.cost} pts`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             {/* Flag input / Contributor restriction */}
             {isContributorRole ? (
               <div className="p-3.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-center gap-2.5">
@@ -276,6 +291,10 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
                 className="space-y-1.5"
                 onSubmit={e => {
                   e.preventDefault();
+                  if (cooldownRemaining > 0) {
+                    toast.error(`Cooldown aktif! Coba lagi dalam ${cooldownRemaining} detik.`);
+                    return;
+                  }
                   const val = (flagInputs[challenge.id] || '').trim();
                   if (!/^POLIJE\{[ -~]+\}$/.test(val)) {
                     toast.error('Format flag tidak valid! Format wajib: POLIJE{.......}');
@@ -290,20 +309,32 @@ const ChallengeDetailDialog: React.FC<ChallengeDetailDialogProps> = ({
                     value={flagInputs[challenge.id] || ''}
                     onChange={e => handleFlagInputChange(challenge.id, e.target.value)}
                     placeholder="POLIJE{.......}"
-                    className="flex-1 px-3 py-2 rounded border border-[#35355e] dark:border-gray-700 bg-[#181829] dark:bg-gray-800 text-white font-mono text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-400"
+                    disabled={cooldownRemaining > 0}
+                    className="flex-1 px-3 py-2 rounded border border-[#35355e] dark:border-gray-700 bg-[#181829] dark:bg-gray-800 text-white font-mono text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-400 disabled:opacity-60"
                     autoFocus
                   />
                   <button
                     type="submit"
-                    disabled={submitting[challenge.id] || !flagInputs[challenge.id]?.trim()}
+                    disabled={submitting[challenge.id] || !flagInputs[challenge.id]?.trim() || cooldownRemaining > 0}
                     className="px-5 py-2 rounded bg-gradient-to-br from-pink-500 to-pink-400 text-white font-bold shadow hover:from-pink-400 hover:to-pink-500 transition disabled:opacity-50"
                   >
-                    {submitting[challenge.id] ? '...' : 'Submit'}
+                    {cooldownRemaining > 0
+                      ? `Cooldown (${cooldownRemaining}s)`
+                      : submitting[challenge.id]
+                      ? '...'
+                      : 'Submit'}
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400 font-mono">
-                  Format Flag: <span className="text-pink-400 font-semibold">POLIJE&#123;.......&#125;</span>
-                </p>
+                {cooldownRemaining > 0 ? (
+                  <p className="text-[11px] text-amber-400 font-mono flex items-center gap-1">
+                    <span>⏳</span>
+                    <span>Tunggu cooldown: {cooldownRemaining} detik sebelum mencoba kembali.</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 font-mono">
+                    Format Flag: <span className="text-pink-400 font-semibold">POLIJE&#123;.......&#125;</span>
+                  </p>
+                )}
               </form>
             )}
 
