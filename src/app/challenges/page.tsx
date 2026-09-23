@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import { ChevronDown, Check, Eye, ArrowRight, Sparkles, X } from "lucide-react";
+import { ChevronDown, Check, Eye, ArrowRight, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { supabase } from "@/lib/supabase";
@@ -113,16 +113,6 @@ export default function ChallengesPage() {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
   const [adminPreviewChallenges, setAdminPreviewChallenges] = useState(false);
   const [challengesLoading, setChallengesLoading] = useState(false);
-  const [showAiWarning, setShowAiWarning] = useState(true);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const dismissed = localStorage.getItem("ctf_dismiss_ai_warning");
-      if (dismissed === "true") {
-        setShowAiWarning(false);
-      }
-    }
-  }, []);
 
   // Cek admin & URL preview param on mount
   useEffect(() => {
@@ -1053,36 +1043,18 @@ export default function ChallengesPage() {
           </div>
         ) : (
           <>
-            {/* AI PSA / Skill Issue Banner */}
-            {showAiWarning && (
-              <div className="rounded-2xl p-3 sm:p-3.5 bg-gradient-to-r from-amber-500/10 via-slate-900/60 to-slate-900/40 border border-amber-500/30 text-slate-300 flex items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-lg">
-                    🤖
-                  </div>
-                  <div className="text-xs sm:text-[13px] leading-relaxed">
-                    <span className="font-bold text-amber-400">Skill Issue Alert:</span>{" "}
-                    <span className="text-slate-300">
-                      Semua soal langsung dilempar ke AI? Itu mah yang jago ChatGPT/Claude-nya 💀. Flag hasil copy-paste prompt ga bikin kamu jadi hacker beneran, asah analisis &amp; logika debugging-mu sendiri!
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAiWarning(false);
-                    if (typeof window !== "undefined") {
-                      localStorage.setItem("ctf_dismiss_ai_warning", "true");
-                    }
-                  }}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition shrink-0 cursor-pointer"
-                  title="Tutup pesan"
-                  aria-label="Tutup pesan"
-                >
-                  <X size={16} />
-                </button>
+            {/* AI PSA / Skill Issue Banner (Permanent) */}
+            <div className="rounded-2xl p-3 sm:p-3.5 bg-gradient-to-r from-amber-500/10 via-slate-900/60 to-slate-900/40 border border-amber-500/30 text-slate-300 flex items-center gap-3 shadow-xs">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-lg">
+                🤖
               </div>
-            )}
+              <div className="text-xs sm:text-[13px] leading-relaxed">
+                <span className="font-bold text-amber-400">Skill Issue Alert:</span>{" "}
+                <span className="text-slate-300">
+                  Semua soal langsung dilempar ke AI? Itu mah yang jago ChatGPT/Claude-nya 💀. Flag hasil copy-paste prompt ga bikin kamu jadi hacker beneran, asah analisis &amp; logika debugging-mu sendiri!
+                </span>
+              </div>
+            </div>
 
             {/* filter bar */}
             <ChallengeFilterBar

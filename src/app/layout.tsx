@@ -132,6 +132,7 @@ export const metadata: Metadata = {
 
 import { PresenceProvider } from "@/contexts/PresenceContext";
 import TopAlertBanner from "@/components/notifications/TopAlertBanner";
+import AntiInspect from "@/components/AntiInspect";
 
 export default function RootLayout({
   children,
@@ -141,6 +142,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body className={inter.className}>
+        <AntiInspect />
         <ThemeProvider>
           <AuthProvider>
             <PresenceProvider>
