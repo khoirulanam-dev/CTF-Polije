@@ -33,6 +33,7 @@ const ScoreboardChart: React.FC<ScoreboardChartProps> = ({ leaderboard, isDark }
       hovertemplate: '%{x}<br>%{text}<extra></extra>',
       mode: 'lines+markers',
       name: shortName,
+      showlegend: true,
       line: { shape: 'hv', width: 3 },
       marker: { size: 6 },
     }
@@ -47,6 +48,7 @@ const ScoreboardChart: React.FC<ScoreboardChartProps> = ({ leaderboard, isDark }
         <Plot
           data={chartData}
           layout={{
+            showlegend: true,
             dragmode: false,
             autosize: true,
             xaxis: {
@@ -70,10 +72,10 @@ const ScoreboardChart: React.FC<ScoreboardChartProps> = ({ leaderboard, isDark }
               orientation: 'h',
               x: 0.5,
               xanchor: 'center',
-              y: -0.2,
+              y: -0.22,
               font: { size: 10, color: isDark ? '#cbd5e1' : '#475569' },
             },
-            margin: { t: 20, r: 10, l: 30, b: 40 },
+            margin: { t: 20, r: 10, l: 30, b: 50 },
             plot_bgcolor: isDark ? '#0f172a' : '#fff',
             paper_bgcolor: isDark ? '#0f172a' : '#fff',
           }}

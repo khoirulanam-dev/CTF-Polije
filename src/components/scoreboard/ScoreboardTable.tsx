@@ -17,14 +17,20 @@ import { usePresence } from "@/contexts/PresenceContext";
 interface ScoreboardTableProps {
   leaderboard: LeaderboardEntry[];
   currentUsername?: string;
+  seasonId?: string;
 }
 
 const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
   leaderboard,
   currentUsername,
+  seasonId,
 }) => {
   const pathname = usePathname();
   const { isUserOnline } = usePresence();
+
+  const showAllHref = seasonId
+    ? `/scoreboard/all?season=${encodeURIComponent(seasonId)}`
+    : "/scoreboard/all";
 
   return (
     <Card className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -36,7 +42,7 @@ const ScoreboardTable: React.FC<ScoreboardTableProps> = ({
           </CardTitle>
         </div>
         {pathname === "/scoreboard" && (
-          <Link href="/scoreboard/all">
+          <Link href={showAllHref}>
             <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-500 text-xs text-white">
               Show All
             </Button>

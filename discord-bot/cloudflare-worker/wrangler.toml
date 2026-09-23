@@ -1,0 +1,8 @@
+name = "ctf-polije-discord-notifier"
+main = "src/index.js"
+compatibility_date = "2026-09-22"
+
+[vars]
+# Set these as secrets in Cloudflare, not in this file:
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DISCORD_WEBHOOK_URL,
+# SUPABASE_WEBHOOK_SECRET, MENTION_ROLE_ID
