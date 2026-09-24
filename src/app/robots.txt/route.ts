@@ -5,7 +5,7 @@ Allow: /
 
 # POLIJE CTF 2025
 # Hint: Tidak semua rahasia disimpan lewat HTTP...
-# secret.ctfpolije.dev
+# secret.ctfpolije.my.id
 
 
 `,

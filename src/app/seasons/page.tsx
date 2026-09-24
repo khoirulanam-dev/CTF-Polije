@@ -86,7 +86,7 @@ export default function SeasonsPage() {
         <div className="text-center space-y-3">
           <TitlePage>🏆 Hall of Fame &amp; Riwayat Season</TitlePage>
           <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">
-            Jejak kejayaan para peretas dan klasemen akhir musim-musim kompetisi di platform ctfpolije.dev.
+            Jejak kejayaan para peretas dan klasemen akhir musim-musim kompetisi di platform ctfpolije.my.id.
           </p>
         </div>
 

@@ -31,7 +31,7 @@ export default function PanduanPage() {
         <div className="text-center space-y-4 mb-10">
           <TitlePage>📖 Panduan Bermain CTF</TitlePage>
           <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">
-            Panduan lengkap pemula dan peserta platform ctfpolije.dev. Pelajari konsep dasar Capture The Flag, aturan main, strategi, hingga toolset penting.
+            Panduan lengkap pemula dan peserta platform ctfpolije.my.id. Pelajari konsep dasar Capture The Flag, aturan main, strategi, hingga toolset penting.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
