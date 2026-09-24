@@ -67,7 +67,7 @@ export async function sendMessage(
   content: string,
   opts?: SendOptions,
   room: string = ROOM
-): Promise<void> {
+): Promise<ChatMessage> {
   const payload: any = {
     room,
     sender_id,
@@ -90,11 +90,24 @@ export async function sendMessage(
     payload.attachment_type = opts.attachment.type;
   }
 
-  const { error } = await supabase.from("chat_messages").insert(payload);
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .insert(payload)
+    .select(
+      `
+      id, room, sender_id, sender_role, sender_name, content, created_at,
+      reply_to_id, reply_to_name, reply_to_content,
+      attachment_url, attachment_name, attachment_size, attachment_mime, attachment_type
+    `
+    )
+    .single();
+
   if (error) {
     console.error("sendMessage error", error);
     throw error;
   }
+
+  return data as ChatMessage;
 }
 
 export async function toggleReaction(

@@ -446,6 +446,17 @@ export default function LiveChatWidget() {
     [userId, fetchMissingUserProfiles]
   );
 
+  const activeUserIdRef = useRef(activeUserId);
+  activeUserIdRef.current = activeUserId;
+  const activeUsernameRef = useRef(activeUsername);
+  activeUsernameRef.current = activeUsername;
+  const activeIsAdminRef = useRef(activeIsAdmin);
+  activeIsAdminRef.current = activeIsAdmin;
+  const fetchMissingUserProfilesRef = useRef(fetchMissingUserProfiles);
+  fetchMissingUserProfilesRef.current = fetchMissingUserProfiles;
+  const refreshReactionsRef = useRef(refreshReactions);
+  refreshReactionsRef.current = refreshReactions;
+
   // ---------- inspect reaction derived states ----------
   const inspectMessageReactions = useMemo(() => {
     if (!inspectReaction) return [];
@@ -551,8 +562,9 @@ export default function LiveChatWidget() {
   useEffect(() => {
     if (open) {
       setUnreadCount(0);
-      if (msgs.length > 0 && activeUserId) {
-        const latestId = Math.max(...msgs.map((m) => m.id));
+      const validMsgs = msgs.filter((m) => m.id > 0);
+      if (validMsgs.length > 0 && activeUserId) {
+        const latestId = Math.max(...validMsgs.map((m) => m.id));
         try {
           localStorage.setItem(`chat_last_read_id_${activeUserId}`, String(latestId));
         } catch {}
@@ -560,10 +572,108 @@ export default function LiveChatWidget() {
     }
   }, [open, msgs, activeUserId]);
 
-  // ---------- realtime chat (INSERT + DELETE + REACTIONS) ----------
+  // ---------- incoming message handler (used by both Broadcast and postgres_changes) ----------
+  const handleIncomingMessage = useCallback((m: Msg) => {
+    if (!m || !m.id) return;
+
+    const currentUserId = activeUserIdRef.current;
+    const currentUsername = activeUsernameRef.current;
+    const currentIsAdmin = activeIsAdminRef.current;
+
+    if (m.sender_id === currentUserId) {
+      m.sender_name = currentUsername;
+      m.sender_role = currentIsAdmin ? "admin" : "user";
+    } else if (m.sender_id) {
+      fetchMissingUserProfilesRef.current([m.sender_id]);
+    }
+
+    setMsgs((prev) => {
+      // 1. If message already exists by real id, ignore
+      if (prev.some((x) => x.id === m.id)) return prev;
+
+      // 2. If this message is replacing an optimistic message sent from this tab (id < 0)
+      const optimisticIdx = prev.findIndex(
+        (x) =>
+          x.id < 0 &&
+          x.sender_id === m.sender_id &&
+          x.content === m.content &&
+          (x.attachment_url || null) === (m.attachment_url || null)
+      );
+
+      if (optimisticIdx !== -1) {
+        const next = [...prev];
+        next[optimisticIdx] = m;
+        return next;
+      }
+
+      return [...prev, m];
+    });
+
+    // Increment unread count if chat is closed and message is not mine
+    if (
+      !openRef.current &&
+      m.sender_id !== currentUserId &&
+      m.content !== "__DELETED_FOR_EVERYONE__"
+    ) {
+      setUnreadCount((prev) => prev + 1);
+    }
+
+    if (
+      currentUsername &&
+      m.sender_id !== currentUserId &&
+      new RegExp(`@${currentUsername}\\b`, "i").test(m.content || "")
+    ) {
+      showNotice(`📣 Kamu di-mention oleh ${m.sender_name || "User"}!`);
+      try {
+        const audio = new Audio("/sounds/mention.mp3");
+        audio.volume = 0.35;
+        audio.play().catch(() => {});
+      } catch {}
+    }
+
+    if (
+      m.sender_id !== currentUserId &&
+      /\@all\b/i.test(m.content || "") &&
+      m.sender_role === "admin"
+    ) {
+      showNotice(`📣 Admin mem-mention semua orang!`);
+      try {
+        const audio = new Audio("/sounds/mention.mp3");
+        audio.volume = 0.35;
+        audio.play().catch(() => {});
+      } catch {}
+    }
+  }, []);
+
+  // ---------- realtime chat (INSERT + DELETE + REACTIONS + BROADCAST) ----------
   useEffect(() => {
     const ch = supabase
-      .channel("global-chat")
+      .channel("global-chat", {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      .on("broadcast", { event: "new_message" }, ({ payload }) => {
+        handleIncomingMessage(payload as Msg);
+      })
+      .on("broadcast", { event: "update_message" }, ({ payload }) => {
+        const updated = payload as Msg;
+        if (updated && updated.id) {
+          setMsgs((prev) =>
+            prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x))
+          );
+        }
+      })
+      .on("broadcast", { event: "delete_message" }, ({ payload }) => {
+        const deletedId = (payload as any)?.id;
+        if (!deletedId) return;
+        setMsgs((prev) => prev.filter((x) => x.id !== deletedId));
+        setReactionsMap((prev) => {
+          const next = { ...prev };
+          delete next[deletedId];
+          return next;
+        });
+      })
       .on(
         "postgres_changes",
         {
@@ -573,51 +683,7 @@ export default function LiveChatWidget() {
           filter: `room=eq.${CHAT_ROOM}`,
         },
         (payload) => {
-          const m = payload.new as Msg;
-
-          if (m.sender_id === activeUserId) {
-            m.sender_name = activeUsername;
-            m.sender_role = activeIsAdmin ? "admin" : "user";
-          } else if (m.sender_id) {
-            fetchMissingUserProfiles([m.sender_id]);
-          }
-
-          setMsgs((prev) => [...prev, m]);
-
-          // Increment unread count if chat is closed and message is not mine
-          if (
-            !openRef.current &&
-            m.sender_id !== activeUserId &&
-            m.content !== "__DELETED_FOR_EVERYONE__"
-          ) {
-            setUnreadCount((prev) => prev + 1);
-          }
-
-          if (
-            activeUsername &&
-            m.sender_id !== activeUserId &&
-            new RegExp(`@${activeUsername}\\b`, "i").test(m.content || "")
-          ) {
-            showNotice(`📣 Kamu di-mention oleh ${m.sender_name || "User"}!`);
-            try {
-              const audio = new Audio("/sounds/mention.mp3");
-              audio.volume = 0.35;
-              audio.play().catch(() => {});
-            } catch {}
-          }
-
-          if (
-            m.sender_id !== activeUserId &&
-            /\@all\b/i.test(m.content || "") &&
-            m.sender_role === "admin"
-          ) {
-            showNotice(`📣 Admin mem-mention semua orang!`);
-            try {
-              const audio = new Audio("/sounds/mention.mp3");
-              audio.volume = 0.35;
-              audio.play().catch(() => {});
-            } catch {}
-          }
+          handleIncomingMessage(payload.new as Msg);
         }
       )
       .on(
@@ -665,8 +731,9 @@ export default function LiveChatWidget() {
         },
         () => {
           setMsgs((current) => {
-            if (current.length) {
-              refreshReactions(current.map((m) => m.id));
+            const valid = current.filter((m) => m.id > 0);
+            if (valid.length) {
+              refreshReactionsRef.current(valid.map((m) => m.id));
             }
             return current;
           });
@@ -677,11 +744,12 @@ export default function LiveChatWidget() {
     chatChannelRef.current = ch;
 
     return () => {
-      if (chatChannelRef.current)
+      if (chatChannelRef.current) {
         supabase.removeChannel(chatChannelRef.current);
+      }
       chatChannelRef.current = null;
     };
-  }, [activeUsername, activeUserId, activeIsAdmin, fetchMissingUserProfiles, refreshReactions]);
+  }, [handleIncomingMessage]);
 
   // ---------- presence (online users + typing broadcast) ----------
   useEffect(() => {
@@ -766,16 +834,18 @@ export default function LiveChatWidget() {
   // ---------- reactions fetch/aggregate ----------
   useEffect(() => {
     if (!msgs.length) return;
-    const ids = msgs.map((m) => m.id);
+    const ids = msgs.map((m) => m.id).filter((id) => id > 0);
     const senderIds = msgs.map((m) => m.sender_id).filter(Boolean);
     if (activeUserId) senderIds.push(activeUserId);
     fetchMissingUserProfiles(senderIds);
 
-    refreshReactions(ids);
+    if (ids.length) {
+      refreshReactions(ids);
+    }
   }, [msgs, activeUserId, fetchMissingUserProfiles, refreshReactions]);
 
   async function onReact(mid: number, emoji: string) {
-    if (!activeUserId) return;
+    if (!activeUserId || mid < 0) return;
     try {
       await toggleReaction(mid, emoji, activeUserId);
       setReactionsMap((prev) => {
@@ -890,21 +960,52 @@ export default function LiveChatWidget() {
     lastMsgRef.current = cleaned;
     setCooldownLeft(COOLDOWN_SECONDS);
 
+    const tempId = -Date.now();
+    const optimisticMsg: Msg = {
+      id: tempId,
+      room: CHAT_ROOM,
+      sender_id: activeUserId,
+      sender_role: activeIsAdmin ? "admin" : "user",
+      sender_name: activeUsername,
+      content: cleaned,
+      created_at: new Date().toISOString(),
+      reply_to_id: replyTo?.id ?? null,
+      reply_to_name: replyTo
+        ? replyTo.sender_role === "admin"
+          ? "Admin"
+          : replyTo.sender_name || "User"
+        : null,
+      reply_to_content: replyTo ? truncate(replyTo.content, 120) : null,
+      attachment_url: attachment?.url ?? null,
+      attachment_name: attachment?.name ?? null,
+      attachment_size: attachment?.size ?? null,
+      attachment_mime: attachment?.mime ?? null,
+      attachment_type: attachment?.type ?? null,
+    };
+
+    // ⚡ Optimistic UI update: instantly render in UI (0ms delay!)
+    setMsgs((prev) => [...prev, optimisticMsg]);
+    setText("");
+    const prevReplyTo = replyTo;
+    setReplyTo(null);
+    emitTyping(false);
+    setMentionOpen(false);
+
     try {
-      await sendMessage(
+      const savedMsg = await sendMessage(
         activeUserId,
         activeIsAdmin ? "admin" : "user",
         activeUsername,
         cleaned,
         {
-          ...(replyTo
+          ...(prevReplyTo
             ? {
-                reply_to_id: replyTo.id,
+                reply_to_id: prevReplyTo.id,
                 reply_to_name:
-                  replyTo.sender_role === "admin"
+                  prevReplyTo.sender_role === "admin"
                     ? "Admin"
-                    : replyTo.sender_name || "User",
-                reply_to_content: truncate(replyTo.content, 120),
+                    : prevReplyTo.sender_name || "User",
+                reply_to_content: truncate(prevReplyTo.content, 120),
               }
             : {}),
           attachment: attachment || null,
@@ -912,11 +1013,23 @@ export default function LiveChatWidget() {
         CHAT_ROOM
       );
 
-      setText("");
-      setReplyTo(null);
-      emitTyping(false);
-      setMentionOpen(false);
+      // Replace optimistic message with actual DB record
+      setMsgs((prev) =>
+        prev.map((m) => (m.id === tempId ? savedMsg : m))
+      );
+
+      // ⚡ Broadcast message directly to all other clients via WebSocket (instant <50ms delivery)
+      chatChannelRef.current?.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: savedMsg,
+      });
     } catch {
+      // Revert optimistic message on failure
+      setMsgs((prev) => prev.filter((m) => m.id !== tempId));
+      if (!attachment) {
+        setText(cleaned);
+      }
       showNotice("Gagal mengirim pesan.");
     }
   }
@@ -943,6 +1056,21 @@ export default function LiveChatWidget() {
       const next = { ...prev };
       delete next[mid];
       return next;
+    });
+
+    // Broadcast delete for everyone so other users see it immediately
+    chatChannelRef.current?.send({
+      type: "broadcast",
+      event: "update_message",
+      payload: {
+        id: mid,
+        content: "__DELETED_FOR_EVERYONE__",
+        attachment_url: null,
+        attachment_name: null,
+        attachment_size: null,
+        attachment_mime: null,
+        attachment_type: null,
+      },
     });
 
     try {

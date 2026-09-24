@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import ScoreboardTable from '@/components/scoreboard/ScoreboardTable'
 import ScoreboardEmptyState from '@/components/scoreboard/ScoreboardEmptyState'
+import TeamDetailModal from '@/components/scoreboard/TeamDetailModal'
 
 const ScoreboardChart = dynamic(() => import('@/components/scoreboard/ScoreboardChart'), {
   ssr: false,
@@ -38,6 +39,7 @@ export default function ScoreboardPage() {
   const [mode, setMode] = useState<'users' | 'teams'>('users')
   const [eventEnabled, setEventEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [selectedTeamForModal, setSelectedTeamForModal] = useState<TeamLeaderboardEntry | null>(null)
 
   // 🔒 Redirect if not logged in
   useEffect(() => {
@@ -384,11 +386,16 @@ export default function ScoreboardPage() {
                 />
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                      Team Ranking{' '}
-                      {currentSelectedSeason ? `(${currentSelectedSeason.name})` : '(All Season)'}
-                    </h2>
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>🛡️</span>
+                        <span>Team Ranking {currentSelectedSeason ? `(${currentSelectedSeason.name})` : '(All Season)'}</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Klik pada baris tim untuk melihat anggota, pembagian poin, dan soal yang telah di-solve.
+                      </p>
+                    </div>
                     <Button size="sm" variant="outline" onClick={() => router.push('/teams')}>
                       My Team
                     </Button>
@@ -396,29 +403,54 @@ export default function ScoreboardPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold">
-                          <th className="w-16 py-2 text-center">Rank</th>
-                          <th className="py-2">Team</th>
-                          <th className="py-2 text-center">Members</th>
-                          <th className="py-2 text-center">Score</th>
+                        <tr className="border-b text-left border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">
+                          <th className="w-16 py-3 text-center">Rank</th>
+                          <th className="py-3">Team</th>
+                          <th className="py-3 text-center">Members</th>
+                          <th className="py-3 text-center">Score</th>
                         </tr>
                       </thead>
                       <tbody>
                         {teamLeaderboard.map((entry) => (
                           <tr
                             key={entry.team_id}
-                            className="border-b last:border-0 border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                            onClick={() => setSelectedTeamForModal(entry)}
+                            className="border-b last:border-0 border-slate-100 dark:border-slate-800 hover:bg-blue-50/60 dark:hover:bg-slate-800/60 transition cursor-pointer group"
+                            title="Klik untuk melihat rincian anggota dan soal yang di-solve"
                           >
-                            <td className="py-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                              #{entry.rank}
+                            <td className="py-3 text-center">
+                              {entry.rank === 1 ? (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-500/20 dark:text-yellow-300 dark:border-yellow-500/50 font-bold font-mono text-xs shadow-xs">
+                                  1
+                                </span>
+                              ) : entry.rank === 2 ? (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-300/20 dark:text-slate-200 dark:border-slate-300/50 font-bold font-mono text-xs shadow-xs">
+                                  2
+                                </span>
+                              ) : entry.rank === 3 ? (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-600/20 dark:text-amber-300 dark:border-amber-600/50 font-bold font-mono text-xs shadow-xs">
+                                  3
+                                </span>
+                              ) : (
+                                <span className="font-mono text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                                  #{entry.rank}
+                                </span>
+                              )}
                             </td>
-                            <td className="py-3 font-medium text-slate-900 dark:text-white">
-                              {entry.team_name}
+                            <td className="py-3 font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
+                              <div className="flex items-center justify-between gap-2 pr-2">
+                                <span className="truncate">{entry.team_name}</span>
+                                <span className="text-[11px] font-normal text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 opacity-0 group-hover:opacity-100 transition shrink-0 hidden sm:inline">
+                                  Lihat detail →
+                                </span>
+                              </div>
                             </td>
                             <td className="py-3 text-center text-slate-600 dark:text-slate-300">
-                              {entry.member_count}
+                              <span className="inline-flex items-center gap-1 font-medium text-xs sm:text-sm">
+                                <span className="text-slate-400">👥</span> {entry.member_count}
+                              </span>
                             </td>
-                            <td className="py-3 text-center font-semibold text-blue-600 dark:text-cyan-400">
+                            <td className="py-3 text-center font-bold font-mono text-blue-600 dark:text-cyan-400 text-base">
                               {entry.score}
                             </td>
                           </tr>
@@ -436,6 +468,17 @@ export default function ScoreboardPage() {
                 </div>
               )}
             </motion.div>
+
+            {/* Team Detail Modal */}
+            <TeamDetailModal
+              open={Boolean(selectedTeamForModal)}
+              onOpenChange={(isOpen) => !isOpen && setSelectedTeamForModal(null)}
+              teamId={selectedTeamForModal?.team_id || null}
+              teamName={selectedTeamForModal?.team_name}
+              rank={selectedTeamForModal?.rank}
+              seasonId={selectedSeasonId}
+              period={period}
+            />
           </>
         )}
       </div>

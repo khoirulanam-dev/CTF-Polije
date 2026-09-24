@@ -157,24 +157,34 @@ export async function GET(req: Request) {
     if (profilesError) throw profilesError
 
     const profilesById = new Map((profiles || []).map((profile) => [profile.id, profile]))
-    const users = authUsers.map((authUser) => {
-      const profile = profilesById.get(authUser.id)
+    const authUsersById = new Map(authUsers.map((authUser) => [authUser.id, authUser]))
+
+    const allUserIds = Array.from(
+      new Set([
+        ...authUsers.map((authUser) => authUser.id),
+        ...(profiles || []).map((profile) => profile.id),
+      ])
+    )
+
+    const users = allUserIds.map((id) => {
+      const authUser = authUsersById.get(id)
+      const profile = profilesById.get(id)
       const role = effectiveRole(profile)
 
       return {
-        id: authUser.id,
-        email: authUser.email || '',
+        id,
+        email: authUser?.email || '',
         username:
           profile?.username ||
-          authUser.user_metadata?.username ||
-          authUser.email?.split('@')[0] ||
+          authUser?.user_metadata?.username ||
+          authUser?.email?.split('@')[0] ||
           'User',
         role,
-        created_at: profile?.created_at || authUser.created_at,
-        updated_at: profile?.updated_at || authUser.updated_at || authUser.created_at,
+        created_at: profile?.created_at || authUser?.created_at || new Date().toISOString(),
+        updated_at: profile?.updated_at || authUser?.updated_at || authUser?.created_at || new Date().toISOString(),
         // Heartbeat updates public.users.updated_at, which represents the
         // latest recorded activity for the admin user list.
-        last_seen_at: profile?.updated_at || authUser.last_sign_in_at || null,
+        last_seen_at: profile?.updated_at || authUser?.last_sign_in_at || null,
       }
     })
 
@@ -347,7 +357,9 @@ export async function DELETE(req: Request) {
     }
 
     const { error: authError } = await adminClient.auth.admin.deleteUser(id)
-    if (authError) return NextResponse.json({ error: authError.message }, { status: 400 })
+    if (authError && !authError.message.toLowerCase().includes('user not found')) {
+      return NextResponse.json({ error: authError.message }, { status: 400 })
+    }
 
     // Usually removed by the FK cascade; this also handles profiles without a cascade.
     await adminClient.from('users').delete().eq('id', id)

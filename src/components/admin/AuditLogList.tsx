@@ -74,6 +74,17 @@ const formatAction = (action: string) => {
     .join(" ");
 };
 
+const getLogUserEmail = (log: AuditLogEntry): string => {
+  const payload = log.payload;
+  if (payload.traits?.user_email) {
+    return payload.traits.user_email;
+  }
+  if (payload.actor_username && payload.actor_username !== "service_role") {
+    return payload.actor_username;
+  }
+  return payload.actor_username || payload.traits?.user_id || "-";
+};
+
 const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
   const [selectedActions, setSelectedActions] = React.useState<ActionType[]>(
     []
@@ -143,14 +154,11 @@ const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
         selectedActions.length === 0 ||
         selectedActions.includes(action as ActionType);
 
-      const email =
-        action === "user_deleted"
-          ? log.payload.traits?.user_email
-          : log.payload.actor_username;
+      const email = getLogUserEmail(log);
 
       const matchesSearch =
         !searchQuery ||
-        email?.toLowerCase().includes(searchQuery.toLowerCase());
+        email.toLowerCase().includes(searchQuery.toLowerCase());
 
       return matchesAction && matchesSearch;
     });
@@ -256,9 +264,7 @@ const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
           {filteredLogs.map((log) => {
             const action = log.payload.action as string;
             const isUserDeleted = action === "user_deleted";
-            const userEmail = isUserDeleted
-              ? log.payload.traits?.user_email
-              : log.payload.actor_username;
+            const userEmail = getLogUserEmail(log);
             const style = getActionStyle(action);
 
             return (
@@ -282,7 +288,7 @@ const AuditLogList: React.FC<AuditLogListProps> = ({ logs, isLoading }) => {
                       </span>
                     )}
                   </div>
-                  {isUserDeleted && log.payload.traits?.user_id && (
+                  {(isUserDeleted || action === "user_signedup") && log.payload.traits?.user_id && (
                     <span className="text-[10px] text-gray-500 dark:text-gray-400">
                       ID: {log.payload.traits.user_id.slice(0, 8)}
                     </span>

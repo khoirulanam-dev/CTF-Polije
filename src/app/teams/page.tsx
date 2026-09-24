@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import toast from "react-hot-toast"
 import Loader from "@/components/custom/loading"
 import TitlePage from "@/components/custom/TitlePage"
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/contexts/AuthContext"
-import { createTeam, getMyTeam, joinTeam, leaveTeam, MyTeam, TeamMember } from "@/lib/engagement"
+import { createTeam, getMyTeam, getTeamDetail, joinTeam, leaveTeam, MyTeam, TeamMember, TeamSolve } from "@/lib/engagement"
 import { formatRelativeDate } from "@/lib/utils"
 
 const teamInputClass =
@@ -21,6 +22,7 @@ function TeamsPageContent() {
   const { user, loading: authLoading } = useAuth()
   const [team, setTeam] = useState<MyTeam | null>(null)
   const [members, setMembers] = useState<TeamMember[]>([])
+  const [recentSolves, setRecentSolves] = useState<TeamSolve[]>([])
   const [teamName, setTeamName] = useState("")
   const [inviteCode, setInviteCode] = useState(searchParams.get("invite") || "")
   const [loading, setLoading] = useState(true)
@@ -42,6 +44,12 @@ function TeamsPageContent() {
       const data = await getMyTeam()
       setTeam(data.team)
       setMembers(data.members)
+      if (data.team?.id) {
+        const detail = await getTeamDetail(data.team.id)
+        setRecentSolves(detail.recent_solves || [])
+      } else {
+        setRecentSolves([])
+      }
     } catch (err) {
       console.error(err)
       toast.error("Failed to load team")
@@ -134,7 +142,7 @@ function TeamsPageContent() {
                   onChange={(e) => setTeamName(e.target.value)}
                   placeholder="Team name"
                 />
-                <Button disabled={submitting} onClick={handleCreate}>Create Team</Button>
+                <Button disabled={submitting || !teamName.trim()} onClick={handleCreate}>Create Team</Button>
               </CardContent>
             </Card>
 
@@ -204,7 +212,9 @@ function TeamsPageContent() {
                       {members.map((member) => (
                         <tr key={member.user_id} className="border-b last:border-0 dark:border-gray-700">
                           <td className="py-3 font-medium text-gray-900 dark:text-white">
-                            {member.username}
+                            <Link href={`/user/${encodeURIComponent(member.username)}`} className="hover:underline hover:text-blue-500">
+                              {member.username}
+                            </Link>
                             {member.role === "owner" && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200">Owner</span>}
                           </td>
                           <td className="py-3 text-center text-gray-700 dark:text-gray-300">{member.solves}</td>
@@ -215,6 +225,59 @@ function TeamsPageContent() {
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white dark:bg-gray-800">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-gray-900 dark:text-white">Recent Team Solves</CardTitle>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{recentSolves.length} Total</span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {recentSolves.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Belum ada challenge yang diselesaikan oleh tim ini.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-gray-600 dark:border-gray-700 dark:text-gray-300">
+                          <th className="py-2">Challenge</th>
+                          <th className="py-2">Kategori</th>
+                          <th className="py-2 text-center">Poin</th>
+                          <th className="py-2">Diselesaikan Oleh</th>
+                          <th className="py-2">Waktu</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentSolves.map((solve, idx) => (
+                          <tr key={`${solve.challenge_id}-${solve.username}-${idx}`} className="border-b last:border-0 dark:border-gray-700">
+                            <td className="py-3 font-medium text-gray-900 dark:text-white">
+                              {solve.challenge_title}
+                            </td>
+                            <td className="py-3">
+                              <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                {solve.category}
+                              </span>
+                            </td>
+                            <td className="py-3 text-center font-semibold text-emerald-600 dark:text-emerald-400">
+                              +{solve.points}
+                            </td>
+                            <td className="py-3 text-gray-900 dark:text-white">
+                              <Link href={`/user/${encodeURIComponent(solve.username)}`} className="text-blue-600 hover:underline dark:text-blue-400">
+                                {solve.username}
+                              </Link>
+                            </td>
+                            <td className="py-3 text-xs text-gray-500 dark:text-gray-400">
+                              {formatRelativeDate(solve.solved_at)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </>
