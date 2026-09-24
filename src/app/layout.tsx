@@ -131,6 +131,10 @@ export const metadata: Metadata = {
 };
 
 import { PresenceProvider } from "@/contexts/PresenceContext";
+import { MusicProvider } from "@/contexts/MusicContext";
+import { FloatingMusicButton } from "@/components/music/FloatingMusicButton";
+import { MusicConfigDialog } from "@/components/music/MusicConfigDialog";
+import { HiddenYouTubePlayer } from "@/components/music/HiddenYouTubePlayer";
 import TopAlertBanner from "@/components/notifications/TopAlertBanner";
 import AntiInspect from "@/components/AntiInspect";
 
@@ -151,6 +155,11 @@ export default function RootLayout({
                   <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
                     <Navbar />
                     <TopAlertBanner />
+                    <MusicProvider>
+                      <FloatingMusicButton />
+                      <MusicConfigDialog />
+                      <HiddenYouTubePlayer />
+                    </MusicProvider>
                     <div className="pt-14">
                       <PageTransition>{children}</PageTransition>
                     </div>

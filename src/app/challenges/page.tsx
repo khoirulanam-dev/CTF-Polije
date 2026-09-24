@@ -565,7 +565,7 @@ export default function ChallengesPage() {
         {/* header */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {/* KIRI: Title, Season Aktif, & Panduan */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap pl-12 sm:pl-14 xl:pl-0">
             <TitlePage>🚩 challenges</TitlePage>
 
             {/* Season Badge & Dropdown Switcher */}

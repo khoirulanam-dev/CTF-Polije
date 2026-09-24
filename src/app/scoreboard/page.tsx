@@ -232,7 +232,7 @@ export default function ScoreboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b101b]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pl-12 sm:pl-14 xl:pl-0">
           <TitlePage>🏆 Scoreboard</TitlePage>
           {currentSelectedSeason && (
             <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">

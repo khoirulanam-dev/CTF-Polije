@@ -18,15 +18,18 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           h1: ({...props}) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,
           h2: ({...props}) => <h2 className="text-xl font-semibold mt-4 mb-2" {...props} />,
           h3: ({...props}) => <h3 className="text-lg font-semibold mt-4 mb-2" {...props} />,
-          code: ({inline, children, ...props}: any) =>
+          pre: ({children, ...props}: any) => (
+            <pre className="bg-gray-900 p-3 rounded-md overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all max-w-full my-2" {...props}>
+              {children}
+            </pre>
+          ),
+          code: ({inline, children, className: codeClass, ...props}: any) =>
             inline ? (
               <code className="bg-gray-800 px-1 py-0.5 rounded text-sm font-mono break-all max-w-full break-words" {...props}>
                 {children}
               </code>
             ) : (
-              <pre className="bg-gray-900 p-3 rounded-md overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all max-w-full">
-                <code className="break-all max-w-full break-words" {...props}>{children}</code>
-              </pre>
+              <code className="break-all max-w-full break-words font-mono" {...props}>{children}</code>
             ),
           a: ({...props}) => <a className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
           blockquote: ({...props}) => (
@@ -54,15 +57,18 @@ export function RulesMarkdownRenderer({ content, className = '' }: MarkdownRende
           strong: ({...props}) => <strong className="font-semibold text-gray-900 dark:text-gray-100" {...props} />,
           em: ({...props}) => <em className="italic" {...props} />,
           a: ({...props}) => <a className="text-orange-600 dark:text-orange-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+          pre: ({children, ...props}: any) => (
+            <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all my-2" {...props}>
+              {children}
+            </pre>
+          ),
           code: ({inline, children, ...props}: any) =>
             inline ? (
               <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono text-gray-800 dark:text-gray-100" {...props}>
                 {children}
               </code>
             ) : (
-              <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all">
-                <code className="break-all" {...props}>{children}</code>
-              </pre>
+              <code className="break-all font-mono" {...props}>{children}</code>
             ),
         }}
       >
