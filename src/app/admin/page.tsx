@@ -388,9 +388,9 @@ export default function AdminPage() {
       setEditing(null)
       setFormData({ ...emptyForm })
       toast.success('Challenge saved successfully')
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      toast.error('Failed to save challenge')
+      toast.error(err?.message || 'Failed to save challenge')
     } finally {
       setSubmitting(false)
     }
@@ -402,9 +402,9 @@ export default function AdminPage() {
       const data = await getChallenges(undefined, true)
       setChallenges(data)
       toast.success('Challenge deleted successfully')
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      toast.error('Failed to delete challenge')
+      toast.error(err?.message || 'Failed to delete challenge')
     }
   }
 

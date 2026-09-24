@@ -16,11 +16,35 @@ const GITHUB_ATTACHMENT_HOSTS = new Set([
   'raw.githubusercontent.com',
 ])
 
-function parseHttpsUrl(value?: string | null): URL | null {
+const ALLOWED_ATTACHMENT_HOST_SUFFIXES = [
+  'github.com',
+  'githubusercontent.com',
+  'google.com',
+  'googleapis.com',
+  'dropbox.com',
+  'dropboxusercontent.com',
+  'mega.nz',
+  'mega.io',
+  'mediafire.com',
+  '1drv.ms',
+  'onedrive.live.com',
+  'sharepoint.com',
+  'catbox.moe',
+  'discordapp.com',
+  'discordapp.net',
+  'archive.org',
+  'huggingface.co',
+  'amazonaws.com',
+  'supabase.co',
+  'box.com',
+  'wetransfer.com',
+]
+
+function parseHttpsUrl(value?: string | null, maxLength = 2048): URL | null {
   if (!value) return null
 
   const trimmed = value.trim()
-  if (!trimmed || trimmed.length > 200) return null
+  if (!trimmed || trimmed.length > maxLength) return null
 
   // Reject an explicit non-HTTP(S) scheme before adding a default scheme.
   if (/^[a-z][a-z\d+.-]*:/i.test(trimmed) && !/^https:\/\//i.test(trimmed)) {
@@ -47,7 +71,7 @@ export function normalizeProfileUrl(
   value?: string | null,
   kind: ProfileUrlKind = 'website_url'
 ): string {
-  const parsed = parseHttpsUrl(value)
+  const parsed = parseHttpsUrl(value, 200)
   if (!parsed) return ''
 
   if (kind !== 'website_url') {
@@ -59,7 +83,7 @@ export function normalizeProfileUrl(
 }
 
 export function normalizeExternalHttpsUrl(value?: string | null): string {
-  const parsed = parseHttpsUrl(value)
+  const parsed = parseHttpsUrl(value, 2048)
   return parsed?.toString() || ''
 }
 
@@ -69,24 +93,36 @@ export function isAllowedAttachmentFileUrl(value?: string | null): boolean {
 
   try {
     const attachmentUrl = new URL(normalized)
+    const hostname = attachmentUrl.hostname.toLowerCase()
 
-    // GitHub is an approved external source for challenge files. Keep the
-    // allowlist limited to GitHub's official download/page hosts.
-    if (
-      GITHUB_ATTACHMENT_HOSTS.has(attachmentUrl.hostname.toLowerCase()) &&
-      attachmentUrl.pathname !== '/'
-    ) {
+    // Allow known trusted cloud storage / file hosting services
+    const isAllowedHost = ALLOWED_ATTACHMENT_HOST_SUFFIXES.some(
+      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`)
+    )
+    if (isAllowedHost && attachmentUrl.pathname !== '/') {
       return true
     }
 
     const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!configuredSupabaseUrl) return false
+    if (configuredSupabaseUrl) {
+      const supabaseUrl = new URL(configuredSupabaseUrl)
+      if (
+        hostname === supabaseUrl.hostname &&
+        attachmentUrl.pathname.startsWith('/storage/v1/object/')
+      ) {
+        return true
+      }
+    }
 
-    const supabaseUrl = new URL(configuredSupabaseUrl)
-    return (
-      attachmentUrl.hostname === supabaseUrl.hostname &&
-      attachmentUrl.pathname.startsWith('/storage/v1/object/')
-    )
+    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (configuredAppUrl) {
+      const appUrl = new URL(configuredAppUrl)
+      if (hostname === appUrl.hostname) {
+        return true
+      }
+    }
+
+    return false
   } catch {
     return false
   }
@@ -117,7 +153,7 @@ export function validateAttachments(value: unknown): string | null {
       : Boolean(normalizeExternalHttpsUrl(item.url))
     if (!validUrl) {
       return item.type === 'file'
-        ? 'File attachment harus berasal dari storage Supabase proyek ini atau GitHub.'
+        ? 'File attachment harus berasal dari Google Drive, GitHub, Supabase Storage, atau cloud storage yang didukung.'
         : 'Link attachment harus menggunakan URL HTTPS yang valid.'
     }
   }
