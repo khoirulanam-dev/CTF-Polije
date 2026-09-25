@@ -10,7 +10,7 @@ const ScoreboardChart = dynamic(() => import('@/components/scoreboard/Scoreboard
   loading: () => <div className="h-80 w-full animate-pulse bg-slate-800/40 rounded-xl" />,
 })
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Loader from '@/components/custom/loading'
@@ -65,8 +65,12 @@ export default function ScoreboardPage() {
   }, [user, authLoading, router])
 
   // Single-step Unified Fetcher (fetches scoreboard + seasons simultaneously)
+  const isFetchingRef = useRef(false)
+
   const fetchData = useCallback(async (silent = false) => {
-    if (!user) return
+    if (!user || isFetchingRef.current) return
+    isFetchingRef.current = true
+
     if (!silent && !cachedScoreboard) {
       setLoading(true)
     }
@@ -86,15 +90,20 @@ export default function ScoreboardPage() {
 
       const json = await res.json()
 
-      // Update seasons list if provided
-      const resolvedSeasons: Season[] = Array.isArray(json.seasons) && json.seasons.length > 0 ? json.seasons : seasons
-      if (resolvedSeasons.length > 0) {
-        setSeasons(resolvedSeasons)
+      // Update seasons list only if changed (prevents re-render loop)
+      const returnedSeasons: Season[] = Array.isArray(json.seasons) && json.seasons.length > 0 ? json.seasons : []
+      if (returnedSeasons.length > 0) {
+        setSeasons((prev) => {
+          if (prev.length === returnedSeasons.length && prev[0]?.id === returnedSeasons[0]?.id) {
+            return prev
+          }
+          return returnedSeasons
+        })
       }
 
       // Resolve selected season if not yet set
-      const resolvedSeasonId = targetSeasonQuery || json.season?.id || resolvedSeasons[0]?.id || 'all'
-      if (!selectedSeasonId) {
+      const resolvedSeasonId = targetSeasonQuery || json.season?.id || returnedSeasons[0]?.id || 'all'
+      if (!selectedSeasonId && resolvedSeasonId) {
         setSelectedSeasonId(resolvedSeasonId)
       }
 
@@ -103,7 +112,7 @@ export default function ScoreboardPage() {
         setTeamLeaderboard(teams)
         setLeaderboard([])
         cachedScoreboard = {
-          seasons: resolvedSeasons,
+          seasons: returnedSeasons.length > 0 ? returnedSeasons : seasons,
           selectedSeasonId: resolvedSeasonId,
           leaderboard: [],
           teamLeaderboard: teams,
@@ -126,7 +135,7 @@ export default function ScoreboardPage() {
         setLeaderboard(baseLeaderboard)
         setTeamLeaderboard([])
         cachedScoreboard = {
-          seasons: resolvedSeasons,
+          seasons: returnedSeasons.length > 0 ? returnedSeasons : seasons,
           selectedSeasonId: resolvedSeasonId,
           leaderboard: baseLeaderboard,
           teamLeaderboard: [],
@@ -137,9 +146,10 @@ export default function ScoreboardPage() {
     } catch (err) {
       console.error('Failed to load scoreboard data:', err)
     } finally {
+      isFetchingRef.current = false
       setLoading(false)
     }
-  }, [user, selectedSeasonId, period, mode, seasons])
+  }, [user, selectedSeasonId, period, mode])
 
   useEffect(() => {
     fetchData()
@@ -168,7 +178,7 @@ export default function ScoreboardPage() {
       if (timer) clearTimeout(timer)
       supabase.removeChannel(channel)
     }
-  }, [user, fetchData])
+  }, [user?.id, fetchData])
 
   // Fetch Event settings
   useEffect(() => {
