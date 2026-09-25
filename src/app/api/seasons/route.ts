@@ -49,7 +49,11 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ seasons: seasons || [] }, {
-      headers: { 'Cache-Control': 'private, no-store' },
+      headers: {
+        'Cache-Control': includeDrafts
+          ? 'private, no-cache'
+          : 'public, s-maxage=30, stale-while-revalidate=60',
+      },
     })
   } catch (err) {
     console.error('Error fetching public seasons:', err)

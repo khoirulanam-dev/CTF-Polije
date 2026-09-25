@@ -18,68 +18,68 @@ export async function GET(req: Request) {
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '100', 10), 1), 1000)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0)
 
-    // Scoreboard reads from multiple tables (solves, users, challenges, etc.).
-    // The anon key is blocked by RLS on these tables, so we use the service role key.
-    // Data exposed here is non-sensitive (username, score, avatar_url only).
     const client = supabaseServiceKey
       ? createClient(supabaseUrl, supabaseServiceKey)
       : createClient(supabaseUrl, supabaseAnonKey)
 
-    // 1. Resolve Target Season
-    const { data: allSeasons } = await client
-      .from('seasons')
-      .select('id, number, name, status, started_at, ended_at')
-      .order('number', { ascending: false })
+    // 1. Fetch Seasons & Challenges in PARALLEL (Eliminates 1 roundtrip)
+    const [seasonsRes, challengesRes] = await Promise.all([
+      client
+        .from('seasons')
+        .select('id, number, name, status, started_at, ended_at')
+        .order('number', { ascending: false }),
+      client
+        .from('challenges')
+        .select('id, title, category, points, season_id, is_active'),
+    ])
 
-    const seasonsList = allSeasons || []
+    if (challengesRes.error) {
+      return NextResponse.json({ error: challengesRes.error.message }, { status: 500 })
+    }
+
+    const seasonsList = seasonsRes.data || []
     const activeSeason = seasonsList.find((s) => s.status === 'active') || null
 
     let targetSeasonId: string | null = null
     let targetSeason: any = null
 
     if (seasonParam === 'all') {
-      targetSeasonId = null // indicates all seasons
+      targetSeasonId = null
       targetSeason = null
     } else if (seasonParam) {
-      // Find by id or number
       targetSeason = seasonsList.find((s) => s.id === seasonParam || String(s.number) === seasonParam) || null
       targetSeasonId = targetSeason ? targetSeason.id : seasonParam
     } else {
-      // Default to active season if exists, else latest, else null
       targetSeason = activeSeason || (seasonsList.length > 0 ? seasonsList[0] : null)
       targetSeasonId = targetSeason ? targetSeason.id : null
     }
 
-    // 2. Fetch challenges belonging to the season (or all challenges if targetSeasonId is null)
-    let challengesQuery = client
-      .from('challenges')
-      .select('id, title, category, points, season_id, is_active')
+    // Filter challenges in-memory
+    const allChalls = challengesRes.data || []
+    const challengeList = targetSeasonId
+      ? allChalls.filter((c) => c.season_id === targetSeasonId)
+      : allChalls
 
-    if (targetSeasonId) {
-      challengesQuery = challengesQuery.eq('season_id', targetSeasonId)
-    }
-
-    const { data: challenges, error: challErr } = await challengesQuery
-    if (challErr) {
-      return NextResponse.json({ error: challErr.message }, { status: 500 })
-    }
-
-    const challengeList = challenges || []
     const challMap = new Map(challengeList.map((c) => [c.id, c.points || 0]))
     const challIds = challengeList.map((c) => c.id)
 
-    // If no challenges found for this season, return empty leaderboard early
+    // If no challenges found for this season, return early with seasons list included
     if (challIds.length === 0) {
       return NextResponse.json({
         leaderboard: [],
         teamLeaderboard: [],
         season: targetSeason,
+        seasons: seasonsList,
         period,
         mode,
+      }, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=20',
+        },
       })
     }
 
-    // 3. Determine time cutoff based on period
+    // 2. Determine time cutoff based on period
     let periodStart: string | null = null
     const now = new Date()
 
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
       periodStart = startOfMonth.toISOString()
     }
 
-    // 4. Fetch Solves for these challenges
+    // 3. Fetch Solves & Hint deductions in PARALLEL (Eliminates 1 roundtrip)
     let solvesQuery = client
       .from('solves')
       .select('id, user_id, challenge_id, created_at')
@@ -105,33 +105,41 @@ export async function GET(req: Request) {
       solvesQuery = solvesQuery.gte('created_at', periodStart)
     }
 
-    const { data: solvesData, error: solvesErr } = await solvesQuery
-    if (solvesErr) {
-      return NextResponse.json({ error: solvesErr.message }, { status: 500 })
-    }
-    const solves = solvesData || []
-
-    // 5. Fetch hint deductions for these challenges
-    let hintsQuery = client
+    const hintsQuery = client
       .from('unlocked_hints')
       .select('user_id, cost, challenge_id')
       .in('challenge_id', challIds)
 
-    const { data: hintsData } = await hintsQuery
+    const [solvesRes, hintsRes] = await Promise.all([
+      solvesQuery,
+      hintsQuery,
+    ])
+
+    if (solvesRes.error) {
+      return NextResponse.json({ error: solvesRes.error.message }, { status: 500 })
+    }
+
+    const solves = solvesRes.data || []
+    const hintsData = hintsRes.data || []
     const userHintCosts: Record<string, number> = {}
-    for (const h of hintsData || []) {
+    for (const h of hintsData) {
       userHintCosts[h.user_id] = (userHintCosts[h.user_id] || 0) + (h.cost || 0)
     }
 
-    // 6. Handle MODE = TEAMS
+    // 4. Handle MODE = TEAMS
     if (mode === 'teams') {
-      const { data: teamsData } = await client.from('teams').select('id, name')
-      const { data: teamMembersData } = await client.from('team_members').select('team_id, user_id')
+      const [teamsRes, teamMembersRes] = await Promise.all([
+        client.from('teams').select('id, name'),
+        client.from('team_members').select('team_id, user_id'),
+      ])
+
+      const teamsData = teamsRes.data || []
+      const teamMembersData = teamMembersRes.data || []
 
       const userToTeam = new Map<string, string>()
       const teamMemberCounts: Record<string, number> = {}
 
-      for (const tm of teamMembersData || []) {
+      for (const tm of teamMembersData) {
         userToTeam.set(tm.user_id, tm.team_id)
         teamMemberCounts[tm.team_id] = (teamMemberCounts[tm.team_id] || 0) + 1
       }
@@ -144,7 +152,7 @@ export async function GET(req: Request) {
         last_solve: string | null
       }> = {}
 
-      for (const t of teamsData || []) {
+      for (const t of teamsData) {
         teamStats[t.id] = {
           team_id: t.id,
           team_name: t.name,
@@ -156,7 +164,7 @@ export async function GET(req: Request) {
 
       // Hint deductions per team
       const teamHintCosts: Record<string, number> = {}
-      for (const h of hintsData || []) {
+      for (const h of hintsData) {
         const tid = userToTeam.get(h.user_id)
         if (tid) {
           teamHintCosts[tid] = (teamHintCosts[tid] || 0) + (h.cost || 0)
@@ -201,12 +209,17 @@ export async function GET(req: Request) {
         teamLeaderboard: rankedTeams,
         leaderboard: [],
         season: targetSeason,
+        seasons: seasonsList,
         period,
         mode,
+      }, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=20',
+        },
       })
     }
 
-    // 7. Handle MODE = USERS
+    // 5. Handle MODE = USERS
     const userStats: Record<string, {
       score: number
       solvesCount: number
@@ -244,7 +257,6 @@ export async function GET(req: Request) {
       const deduction = userHintCosts[uid] || 0
       userStats[uid].score = Math.max(0, userStats[uid].score - deduction)
 
-      // Adjust last entry in progress if hint deduction applies
       if (deduction > 0 && userProgressMap[uid]?.length > 0) {
         const lastP = userProgressMap[uid][userProgressMap[uid].length - 1]
         lastP.score = Math.max(0, lastP.score - deduction)
@@ -257,8 +269,13 @@ export async function GET(req: Request) {
         leaderboard: [],
         teamLeaderboard: [],
         season: targetSeason,
+        seasons: seasonsList,
         period,
         mode,
+      }, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=20',
+        },
       })
     }
 
@@ -303,8 +320,13 @@ export async function GET(req: Request) {
       leaderboard: pagedUsers,
       totalCount: rankedUsers.length,
       season: targetSeason,
+      seasons: seasonsList,
       period,
       mode,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=20',
+      },
     })
   } catch (err: any) {
     console.error('Error calculating scoreboard:', err)

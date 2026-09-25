@@ -12,17 +12,29 @@ import ImageWithFallback from '@/components/ImageWithFallback'
 import { getPublicSeasons, getSeasonArchives } from '@/lib/seasons'
 import { Season, SeasonArchive, TopPlayerArchive, TopChallengeArchive } from '@/types'
 
+let cachedSeasonsState: {
+  seasons: Season[]
+  archives: SeasonArchive[]
+  selectedSeasonNumber: number
+} | null = null
+
 export default function SeasonsPage() {
-  const [seasons, setSeasons] = useState<Season[]>([])
-  const [archives, setArchives] = useState<SeasonArchive[]>([])
-  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(1)
-  const [loading, setLoading] = useState(true)
+  const [seasons, setSeasons] = useState<Season[]>(() => cachedSeasonsState?.seasons || [])
+  const [archives, setArchives] = useState<SeasonArchive[]>(() => cachedSeasonsState?.archives || [])
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const sParam = new URLSearchParams(window.location.search).get('season')
+      if (sParam) return parseInt(sParam) || 1
+    }
+    return cachedSeasonsState?.selectedSeasonNumber || 1
+  })
+  const [loading, setLoading] = useState(() => !cachedSeasonsState)
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        setLoading(true)
+        if (!cachedSeasonsState) setLoading(true)
         const [publicSeasons, seasonArchives] = await Promise.all([
           getPublicSeasons(),
           getSeasonArchives(),
@@ -32,17 +44,26 @@ export default function SeasonsPage() {
         setSeasons(publicSeasons)
         setArchives(seasonArchives)
 
-        // Ambil query param dari URL jika ada
+        let initialNumber = selectedSeasonNumber
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search)
           const sParam = params.get('season')
           if (sParam) {
-            setSelectedSeasonNumber(parseInt(sParam) || 1)
-          } else if (seasonArchives.length > 0) {
-            setSelectedSeasonNumber(seasonArchives[0].season_number)
-          } else if (publicSeasons.length > 0) {
-            setSelectedSeasonNumber(publicSeasons[0].number)
+            initialNumber = parseInt(sParam) || 1
+          } else if (!cachedSeasonsState) {
+            if (seasonArchives.length > 0) {
+              initialNumber = seasonArchives[0].season_number
+            } else if (publicSeasons.length > 0) {
+              initialNumber = publicSeasons[0].number
+            }
           }
+        }
+        setSelectedSeasonNumber(initialNumber)
+
+        cachedSeasonsState = {
+          seasons: publicSeasons,
+          archives: seasonArchives,
+          selectedSeasonNumber: initialNumber,
         }
       } catch (err) {
         console.error('Error fetching season data:', err)
@@ -52,7 +73,7 @@ export default function SeasonsPage() {
     })()
 
     return () => { mounted = false }
-  }, [])
+  }, [selectedSeasonNumber])
 
   const currentSeason = seasons.find((s) => s.number === selectedSeasonNumber) || null
   const currentArchive = archives.find((a) => a.season_number === selectedSeasonNumber) || null
@@ -67,7 +88,14 @@ export default function SeasonsPage() {
   const mostSolved = topChallenges.length > 0 ? topChallenges[0] : null
   const hardestSolved = topChallenges.length > 1 ? [...topChallenges].sort((a, b) => a.solves_count - b.solves_count)[0] : null
 
-  if (loading) return <Loader fullscreen color="text-orange-500" />
+  if (loading && seasons.length === 0 && archives.length === 0) {
+    return (
+      <div className="flex flex-col min-h-[calc(100lvh-60px)] bg-slate-950 text-slate-100 items-center justify-center space-y-4">
+        <Loader size={48} color="text-orange-500" />
+        <p className="text-sm font-medium text-slate-400">Memuat riwayat season &amp; Hall of Fame...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-[calc(100lvh-60px)] bg-slate-950 text-slate-100 relative overflow-hidden">

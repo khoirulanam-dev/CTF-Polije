@@ -1,10 +1,20 @@
 import { supabase } from './supabase'
 import { Season, SeasonArchive } from '@/types'
 
+let cachedActiveSeason: Season | null = null
+let cachedPublicSeasons: Season[] | null = null
+let cachedArchives: SeasonArchive[] | null = null
+let seasonsInFlight: Promise<Season[]> | null = null
+let archivesInFlight: Promise<SeasonArchive[]> | null = null
+
 /**
  * Mengambil season yang sedang berstatus 'active'
  */
-export async function getActiveSeason(): Promise<Season | null> {
+export async function getActiveSeason(forceRefresh = false): Promise<Season | null> {
+  if (cachedActiveSeason && !forceRefresh) {
+    return cachedActiveSeason
+  }
+
   try {
     const { data, error } = await supabase
       .from('seasons')
@@ -15,33 +25,50 @@ export async function getActiveSeason(): Promise<Season | null> {
       .maybeSingle()
 
     if (error) {
-      // Tabel belum ada atau error RLS, fallback ke default Season 1 virtual
       console.warn('Seasons table query warning:', error.message)
-      return null
+      return cachedActiveSeason || null
     }
 
-    return data as Season | null
+    cachedActiveSeason = data as Season | null
+    return cachedActiveSeason
   } catch (err) {
     console.warn('Error fetching active season:', err)
-    return null
+    return cachedActiveSeason || null
   }
 }
 
 /**
  * Mengambil seluruh daftar seasons yang dapat dilihat publik (active dan archived)
+ * Dilengkapi memory-cache + inflight deduplication agar navigasi instan (0ms).
  */
-export async function getPublicSeasons(): Promise<Season[]> {
+export async function getPublicSeasons(forceRefresh = false): Promise<Season[]> {
+  if (cachedPublicSeasons && cachedPublicSeasons.length > 0 && !forceRefresh) {
+    // Revalidasi di latar belakang tanpa memblokir UI
+    fetchPublicSeasonsRaw().catch(() => {})
+    return cachedPublicSeasons
+  }
+
+  if (seasonsInFlight) {
+    return seasonsInFlight
+  }
+
+  seasonsInFlight = fetchPublicSeasonsRaw().finally(() => {
+    seasonsInFlight = null
+  })
+
+  return seasonsInFlight
+}
+
+async function fetchPublicSeasonsRaw(): Promise<Season[]> {
   try {
     if (typeof window !== 'undefined') {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/seasons', {
-        headers: session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : undefined,
-      })
+      const res = await fetch('/api/seasons')
       if (res.ok) {
         const json = await res.json()
-        if (json.seasons) return json.seasons as Season[]
+        if (Array.isArray(json.seasons) && json.seasons.length > 0) {
+          cachedPublicSeasons = json.seasons as Season[]
+          return cachedPublicSeasons
+        }
       }
     }
 
@@ -52,20 +79,39 @@ export async function getPublicSeasons(): Promise<Season[]> {
 
     if (error) {
       console.warn('Error fetching public seasons:', error.message)
-      return []
+      return cachedPublicSeasons || []
     }
 
-    return (data || []) as Season[]
+    cachedPublicSeasons = (data || []) as Season[]
+    return cachedPublicSeasons
   } catch (err) {
     console.warn('Error getting public seasons:', err)
-    return []
+    return cachedPublicSeasons || []
   }
 }
 
 /**
  * Mengambil riwayat arsip season (Hall of Fame, top players, top soal)
+ * Dilengkapi memory-cache agar buka halaman seasons instan tanpa delay.
  */
-export async function getSeasonArchives(): Promise<SeasonArchive[]> {
+export async function getSeasonArchives(forceRefresh = false): Promise<SeasonArchive[]> {
+  if (cachedArchives && cachedArchives.length > 0 && !forceRefresh) {
+    fetchSeasonArchivesRaw().catch(() => {})
+    return cachedArchives
+  }
+
+  if (archivesInFlight) {
+    return archivesInFlight
+  }
+
+  archivesInFlight = fetchSeasonArchivesRaw().finally(() => {
+    archivesInFlight = null
+  })
+
+  return archivesInFlight
+}
+
+async function fetchSeasonArchivesRaw(): Promise<SeasonArchive[]> {
   try {
     const { data, error } = await supabase
       .from('season_archives')
@@ -74,13 +120,14 @@ export async function getSeasonArchives(): Promise<SeasonArchive[]> {
 
     if (error) {
       console.warn('Error fetching season archives:', error.message)
-      return []
+      return cachedArchives || []
     }
 
-    return (data || []) as SeasonArchive[]
+    cachedArchives = (data || []) as SeasonArchive[]
+    return cachedArchives
   } catch (err) {
     console.warn('Error getting season archives:', err)
-    return []
+    return cachedArchives || []
   }
 }
 
@@ -88,6 +135,11 @@ export async function getSeasonArchives(): Promise<SeasonArchive[]> {
  * Mengambil detail snapshot arsip suatu season berdasarkan nomor season
  */
 export async function getSeasonArchiveByNumber(seasonNumber: number): Promise<SeasonArchive | null> {
+  if (cachedArchives) {
+    const found = cachedArchives.find((a) => a.season_number === seasonNumber)
+    if (found) return found
+  }
+
   try {
     const { data, error } = await supabase
       .from('season_archives')

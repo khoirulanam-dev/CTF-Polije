@@ -24,21 +24,37 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { LeaderboardEntry, Season } from '@/types'
 import { supabase } from '@/lib/supabase'
 
+// In-memory cache outside component lifecycle for instant 0ms page navigation
+interface ScoreboardCache {
+  seasons: Season[]
+  selectedSeasonId: string
+  leaderboard: LeaderboardEntry[]
+  teamLeaderboard: TeamLeaderboardEntry[]
+  period: LeaderboardPeriod
+  mode: 'users' | 'teams'
+}
+let cachedScoreboard: ScoreboardCache | null = null
+
 export default function ScoreboardPage() {
   const { user, loading: authLoading } = useAuth()
   const { theme } = useTheme()
   const router = useRouter()
 
-  const [seasons, setSeasons] = useState<Season[]>([])
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('')
-  const [seasonsLoaded, setSeasonsLoaded] = useState(false)
+  const [seasons, setSeasons] = useState<Season[]>(() => cachedScoreboard?.seasons || [])
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const sParam = new URLSearchParams(window.location.search).get('season')
+      if (sParam) return sParam === 'all' ? 'all' : sParam
+    }
+    return cachedScoreboard?.selectedSeasonId || ''
+  })
 
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [teamLeaderboard, setTeamLeaderboard] = useState<TeamLeaderboardEntry[]>([])
-  const [period, setPeriod] = useState<LeaderboardPeriod>('all')
-  const [mode, setMode] = useState<'users' | 'teams'>('users')
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(() => cachedScoreboard?.leaderboard || [])
+  const [teamLeaderboard, setTeamLeaderboard] = useState<TeamLeaderboardEntry[]>(() => cachedScoreboard?.teamLeaderboard || [])
+  const [period, setPeriod] = useState<LeaderboardPeriod>(() => cachedScoreboard?.period || 'all')
+  const [mode, setMode] = useState<'users' | 'teams'>(() => cachedScoreboard?.mode || 'users')
   const [eventEnabled, setEventEnabled] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !cachedScoreboard)
   const [selectedTeamForModal, setSelectedTeamForModal] = useState<TeamLeaderboardEntry | null>(null)
 
   // 🔒 Redirect if not logged in
@@ -48,72 +64,21 @@ export default function ScoreboardPage() {
     }
   }, [user, authLoading, router])
 
-  // Load Seasons and resolve initial selection
-  useEffect(() => {
-    let mounted = true
-    const initSeasons = async () => {
-      try {
-        const publicSeasons = await getPublicSeasons()
-        if (!mounted) return
-        setSeasons(publicSeasons)
-
-        // Read query param from URL if present
-        let initialSeasonId = ''
-        if (typeof window !== 'undefined') {
-          const params = new URLSearchParams(window.location.search)
-          const sParam = params.get('season')
-          if (sParam) {
-            if (sParam.toLowerCase() === 'all') {
-              initialSeasonId = 'all'
-            } else {
-              const matched = publicSeasons.find(
-                (s) => s.id === sParam || String(s.number) === sParam
-              )
-              if (matched) initialSeasonId = matched.id
-            }
-          }
-        }
-
-        // If no URL param, default to active season
-        if (!initialSeasonId) {
-          const active = publicSeasons.find((s) => s.status === 'active')
-          if (active) {
-            initialSeasonId = active.id
-          } else if (publicSeasons.length > 0) {
-            initialSeasonId = publicSeasons[0].id
-          } else {
-            initialSeasonId = 'all'
-          }
-        }
-
-        setSelectedSeasonId(initialSeasonId)
-      } catch (err) {
-        console.error('Error fetching seasons:', err)
-        setSelectedSeasonId('all')
-      } finally {
-        if (mounted) setSeasonsLoaded(true)
-      }
+  // Single-step Unified Fetcher (fetches scoreboard + seasons simultaneously)
+  const fetchData = useCallback(async (silent = false) => {
+    if (!user) return
+    if (!silent && !cachedScoreboard) {
+      setLoading(true)
     }
-
-    if (user) {
-      initSeasons()
-    }
-
-    return () => {
-      mounted = false
-    }
-  }, [user])
-
-  // Fetch Scoreboard Data
-  const fetchData = useCallback(async () => {
-    if (!user || !seasonsLoaded || !selectedSeasonId) {
-      return
-    }
-    setLoading(true)
 
     try {
+      let targetSeasonQuery = selectedSeasonId
+      if (!targetSeasonQuery && typeof window !== 'undefined') {
+        targetSeasonQuery = new URLSearchParams(window.location.search).get('season') || ''
+      }
+
       const res = await fetch(
-        `/api/scoreboard?season_id=${encodeURIComponent(selectedSeasonId)}&period=${encodeURIComponent(period)}&mode=${encodeURIComponent(mode)}`
+        `/api/scoreboard?season_id=${encodeURIComponent(targetSeasonQuery)}&period=${encodeURIComponent(period)}&mode=${encodeURIComponent(mode)}`
       )
       if (!res.ok) {
         throw new Error(`Failed to fetch scoreboard: ${res.statusText}`)
@@ -121,9 +86,30 @@ export default function ScoreboardPage() {
 
       const json = await res.json()
 
+      // Update seasons list if provided
+      const resolvedSeasons: Season[] = Array.isArray(json.seasons) && json.seasons.length > 0 ? json.seasons : seasons
+      if (resolvedSeasons.length > 0) {
+        setSeasons(resolvedSeasons)
+      }
+
+      // Resolve selected season if not yet set
+      const resolvedSeasonId = targetSeasonQuery || json.season?.id || resolvedSeasons[0]?.id || 'all'
+      if (!selectedSeasonId) {
+        setSelectedSeasonId(resolvedSeasonId)
+      }
+
       if (mode === 'teams') {
-        setTeamLeaderboard(json.teamLeaderboard || [])
+        const teams = json.teamLeaderboard || []
+        setTeamLeaderboard(teams)
         setLeaderboard([])
+        cachedScoreboard = {
+          seasons: resolvedSeasons,
+          selectedSeasonId: resolvedSeasonId,
+          leaderboard: [],
+          teamLeaderboard: teams,
+          period,
+          mode,
+        }
       } else {
         const baseLeaderboard: LeaderboardEntry[] = (json.leaderboard || []).map((t: any) => ({
           id: t.id,
@@ -139,15 +125,21 @@ export default function ScoreboardPage() {
 
         setLeaderboard(baseLeaderboard)
         setTeamLeaderboard([])
+        cachedScoreboard = {
+          seasons: resolvedSeasons,
+          selectedSeasonId: resolvedSeasonId,
+          leaderboard: baseLeaderboard,
+          teamLeaderboard: [],
+          period,
+          mode,
+        }
       }
     } catch (err) {
       console.error('Failed to load scoreboard data:', err)
-      setLeaderboard([])
-      setTeamLeaderboard([])
     } finally {
       setLoading(false)
     }
-  }, [user, seasonsLoaded, selectedSeasonId, period, mode])
+  }, [user, selectedSeasonId, period, mode, seasons])
 
   useEffect(() => {
     fetchData()
@@ -166,7 +158,7 @@ export default function ScoreboardPage() {
         () => {
           if (timer) clearTimeout(timer)
           timer = setTimeout(() => {
-            fetchData()
+            fetchData(true)
           }, 3000)
         }
       )
@@ -356,9 +348,10 @@ export default function ScoreboardPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader fullscreen color="text-orange-500" />
+        {loading && leaderboard.length === 0 && teamLeaderboard.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 space-y-3">
+            <Loader size={44} color="text-blue-500" />
+            <p className="text-xs font-medium text-slate-400">Memuat klasemen scoreboard...</p>
           </div>
         ) : !user ? null : mode === 'users' && isEmpty ? (
           <ScoreboardEmptyState />
