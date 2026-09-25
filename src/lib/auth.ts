@@ -329,74 +329,113 @@ export async function signIn(
   }
 }
 
+let cachedCurrentUser: { user: User | null; timestamp: number } | null = null;
+let currentUserInFlight: Promise<User | null> | null = null;
+const AUTH_CACHE_TTL = 45000; // 45 detik cache in-memory
+
+export function invalidateAuthCache(): void {
+  cachedCurrentUser = null;
+}
+
 /**
  * Sign out user
  */
 export async function signOut(): Promise<void> {
+  invalidateAuthCache();
   await supabase.auth.signOut();
 }
 
 /**
  * Get current user
  */
-export async function getCurrentUser(): Promise<User | null> {
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    // Fetch user profile via RPC
-    let { data, error } = await supabase.rpc("get_user_profile", {
-      p_id: user.id,
-    });
-    let userData = data && data.length > 0 ? data[0] : null;
-
-    // Kalau belum ada profile (misal Google login pertama kali) → buat
-    if (!userData) {
-      const username =
-        user.user_metadata?.username ||
-        (user.email
-          ? user.email.split("@")[0]
-          : "user_" + user.id.substring(0, 8));
-
-      const { error: rpcError } = await supabase.rpc("create_profile", {
-        p_id: user.id,
-        p_username: username,
-      });
-      if (rpcError) {
-        console.error("Auto create_profile error:", rpcError);
-        return null;
-      }
-      const { data: newData, error: newError } = await supabase.rpc(
-        "get_user_profile",
-        { p_id: user.id }
-      );
-      userData = newData && newData.length > 0 ? newData[0] : null;
-      if (newError || !userData) {
-        return null;
-      }
-    }
-
-    if (userData) {
-      const isActuallyAdmin = Boolean(userData.is_admin === true || userData.role === 'admin');
-      const role = isActuallyAdmin 
-        ? 'admin' 
-        : (userData.role === 'contributor' ? 'contributor' : 'user');
-      userData.role = role;
-      userData.is_admin = isActuallyAdmin;
-      userData.is_contributor = !isActuallyAdmin && role === 'contributor';
-    }
-    return userData;
-  } catch (error) {
-    return null;
+export async function getCurrentUser(forceRefresh = false): Promise<User | null> {
+  if (!forceRefresh && cachedCurrentUser && Date.now() - cachedCurrentUser.timestamp < AUTH_CACHE_TTL) {
+    return cachedCurrentUser.user;
   }
+
+  if (currentUserInFlight) {
+    return currentUserInFlight;
+  }
+
+  currentUserInFlight = (async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        cachedCurrentUser = { user: null, timestamp: Date.now() };
+        return null;
+      }
+
+      // Fetch user profile via RPC dan is_admin secara paralel
+      const [profileRes, adminRes] = await Promise.all([
+        supabase.rpc("get_user_profile", { p_id: user.id }),
+        supabase.rpc("is_admin"),
+      ]);
+      let userData = profileRes.data && profileRes.data.length > 0 ? profileRes.data[0] : null;
+      const rpcIsAdmin = Boolean(adminRes?.data);
+
+      // Kalau belum ada profile (misal Google login pertama kali) → buat
+      if (!userData) {
+        const username =
+          user.user_metadata?.username ||
+          (user.email
+            ? user.email.split("@")[0]
+            : "user_" + user.id.substring(0, 8));
+
+        const { error: rpcError } = await supabase.rpc("create_profile", {
+          p_id: user.id,
+          p_username: username,
+        });
+        if (rpcError) {
+          console.error("Auto create_profile error:", rpcError);
+          return null;
+        }
+        const { data: newData, error: newError } = await supabase.rpc(
+          "get_user_profile",
+          { p_id: user.id }
+        );
+        userData = newData && newData.length > 0 ? newData[0] : null;
+        if (newError || !userData) {
+          return null;
+        }
+      }
+
+      if (userData) {
+        const isActuallyAdmin = Boolean(
+          userData.is_admin === true || 
+          userData.role === 'admin' || 
+          rpcIsAdmin
+        );
+        const role = isActuallyAdmin 
+          ? 'admin' 
+          : (userData.role === 'contributor' ? 'contributor' : 'user');
+        userData.role = role;
+        userData.is_admin = isActuallyAdmin;
+        userData.is_contributor = !isActuallyAdmin && role === 'contributor';
+      }
+
+      cachedCurrentUser = { user: userData, timestamp: Date.now() };
+      return userData;
+    } catch (error) {
+      return null;
+    } finally {
+      currentUserInFlight = null;
+    }
+  })();
+
+  return currentUserInFlight;
 }
 
 /**
  * Check if current user is admin
  */
 export async function isAdmin(): Promise<boolean> {
+  // Fast path jika sudah terkonfirmasi admin dari cache
+  if (cachedCurrentUser?.user && (cachedCurrentUser.user.is_admin || cachedCurrentUser.user.role === 'admin')) {
+    return true;
+  }
+
   try {
     const user = await getCurrentUser();
     if (user && (user.is_admin || user.role === 'admin')) return true;
@@ -404,7 +443,12 @@ export async function isAdmin(): Promise<boolean> {
     if (error) {
       return Boolean(user?.is_admin || user?.role === 'admin');
     }
-    return Boolean(data);
+    const result = Boolean(data);
+    if (cachedCurrentUser?.user) {
+      cachedCurrentUser.user.is_admin = result;
+      if (result) cachedCurrentUser.user.role = 'admin';
+    }
+    return result;
   } catch (error) {
     return false;
   }
@@ -414,6 +458,12 @@ export async function isAdmin(): Promise<boolean> {
  * Check if current user is contributor (strictly not admin)
  */
 export async function isContributor(): Promise<boolean> {
+  if (cachedCurrentUser?.user) {
+    const u = cachedCurrentUser.user;
+    if (u.is_admin || u.role === 'admin') return false;
+    return u.role === 'contributor' || u.is_contributor === true;
+  }
+
   try {
     const user = await getCurrentUser();
     if (!user) return false;
@@ -428,6 +478,13 @@ export async function isContributor(): Promise<boolean> {
  * Get role of current user
  */
 export async function getUserRole(): Promise<'admin' | 'contributor' | 'user'> {
+  if (cachedCurrentUser?.user) {
+    const u = cachedCurrentUser.user;
+    if (u.is_admin || u.role === 'admin') return 'admin';
+    if (u.role === 'contributor') return 'contributor';
+    return 'user';
+  }
+
   try {
     const user = await getCurrentUser();
     if (!user) return 'user';

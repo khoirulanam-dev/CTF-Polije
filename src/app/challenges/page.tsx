@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import { supabase } from "@/lib/supabase";
 import {
   getChallenges,
+  getCachedChallengesSync,
   submitFlag,
   getSolversByChallenge,
 } from "@/lib/challenges";
@@ -58,7 +59,13 @@ export default function ChallengesPage() {
     "challenge"
   );
   const [solvers, setSolvers] = useState<Solver[]>([]);
-  const [challenges, setChallenges] = useState<ChallengeWithSolve[]>([]);
+  const [challenges, setChallenges] = useState<ChallengeWithSolve[]>(() => {
+    if (typeof window !== "undefined") {
+      const cached = getCachedChallengesSync(user?.id);
+      if (cached && cached.length > 0) return normalizeChallengesList(cached);
+    }
+    return [];
+  });
   const [flagInputs, setFlagInputs] = useState<{ [key: string]: string }>({});
   const [flagFeedback, setFlagFeedback] = useState<{
     [key: string]: { success: boolean; message: string } | null;
@@ -156,29 +163,41 @@ export default function ChallengesPage() {
   ) && !isAdminUser;
   const canPreviewDraft = isAdminUser || isContributorUser;
 
-  // ambil challenges
+  // ambil challenges dengan zero-waterfall paralel fetch
   const fetchChallengesData = useCallback(async () => {
     if (!user) return;
     try {
-      const active = await getActiveSeason().catch(() => null);
-      if (active) setActiveSeason(active);
+      const [active, pubSeasons] = await Promise.all([
+        activeSeason ? Promise.resolve(activeSeason) : getActiveSeason().catch(() => null),
+        allSeasons.length > 0
+          ? Promise.resolve(allSeasons)
+          : (isAdminUser
+              ? supabase.from("seasons").select("*").order("number", { ascending: false }).then((r) => (r.data as Season[]) || [])
+              : getPublicSeasons().catch(() => []))
+      ]);
 
+      if (active && !activeSeason) setActiveSeason(active);
+      if (pubSeasons && pubSeasons.length > 0 && allSeasons.length === 0) setAllSeasons(pubSeasons);
+
+      const seasonsList = allSeasons.length > 0 ? allSeasons : (pubSeasons || []);
       const targetSeasonId = selectedSeasonId ? selectedSeasonId : active?.id;
-      const targetSeason = allSeasons.find((s) => s.id === targetSeasonId);
+      const targetSeason = seasonsList.find((s) => s.id === targetSeasonId);
 
       // JIKA TARGET SEASON ADALAH DRAFT DAN BUKAN MODE PREVIEW (ADMIN / KONTRIBUTOR):
-      // Kosongkan list challenges dan jangan fetch apapun!
       if (targetSeason?.status === "draft" && !adminPreviewChallenges) {
         setChallenges([]);
         setChallengesLoading(false);
         return;
       }
 
-      setChallengesLoading(true);
+      // Hanya tampilkan loading jika belum ada data challenges yang ditampilkan
+      if (challenges.length === 0) {
+        setChallengesLoading(true);
+      }
+
       const isViewingNonActive =
         selectedSeasonId && selectedSeasonId !== active?.id;
 
-      // showAll = true jika admin atau kontributor sedang preview draft season
       const showAll = Boolean(
         canPreviewDraft &&
           isViewingNonActive &&
@@ -189,7 +208,9 @@ export default function ChallengesPage() {
       const challengesData = await getChallenges(
         user.id,
         showAll,
-        targetSeasonId
+        targetSeasonId,
+        false,
+        isAdminUser
       );
       setChallenges(normalizeChallengesList(challengesData));
     } catch (err) {
@@ -197,7 +218,7 @@ export default function ChallengesPage() {
     } finally {
       setChallengesLoading(false);
     }
-  }, [user, isAdminUser, canPreviewDraft, selectedSeasonId, allSeasons, adminPreviewChallenges]);
+  }, [user, isAdminUser, canPreviewDraft, selectedSeasonId, allSeasons, adminPreviewChallenges, activeSeason, challenges.length]);
 
   useEffect(() => {
     fetchChallengesData();
@@ -1100,10 +1121,37 @@ export default function ChallengesPage() {
 
             {/* daftar challenge */}
             <div className="space-y-6">
-              {challengesLoading ? (
-                <div className="text-center py-24 space-y-3">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
-                  <p className="text-xs text-slate-400 font-medium">Memuat tantangan...</p>
+              {challengesLoading && challenges.length === 0 ? (
+                <div className="space-y-6">
+                  {[1, 2].map((catIdx) => (
+                    <div key={catIdx} className="space-y-3.5">
+                      <div className="rounded-2xl bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 p-3.5 sm:p-4 shadow-sm animate-pulse">
+                        <div className="h-5 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800/60 rounded mt-3" />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {[1, 2, 3, 4].map((itemIdx) => (
+                          <div
+                            key={itemIdx}
+                            className="rounded-2xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 p-5 space-y-4 animate-pulse shadow-sm"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                              <div className="h-4 w-12 bg-slate-200 dark:bg-slate-800 rounded" />
+                            </div>
+                            <div className="space-y-2">
+                              <div className="h-5 w-3/4 bg-slate-200 dark:bg-slate-800 rounded" />
+                              <div className="h-3 w-full bg-slate-100 dark:bg-slate-800/60 rounded" />
+                            </div>
+                            <div className="pt-2 flex justify-between items-center border-t border-slate-100 dark:border-slate-800/60">
+                              <div className="h-3 w-16 bg-slate-100 dark:bg-slate-800 rounded" />
+                              <div className="h-7 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : filteredChallenges.length === 0 ? (
                 <div className="text-center py-16">

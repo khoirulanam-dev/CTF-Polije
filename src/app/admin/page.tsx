@@ -29,7 +29,10 @@ import APP from '@/config'
 export default function AdminPage() {
   const router = useRouter()
   const { user, loading } = useAuth()
-  const [authorized, setAuthorized] = useState<boolean | null>(null)
+  const [authorized, setAuthorized] = useState<boolean | null>(() => {
+    if (user && (user.is_admin || user.role === 'admin')) return true
+    return null
+  })
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [solvers, setSolvers] = useState<any[]>([])
   const [siteInfo, setSiteInfo] = useState<any | null>(null)
@@ -124,7 +127,7 @@ export default function AdminPage() {
         return
       }
 
-      const adminCheck = await isAdmin()
+      const adminCheck = (user.is_admin || user.role === 'admin') ? true : await isAdmin()
       if (!mounted) return
       if (!adminCheck) {
         setAuthorized(false)
@@ -435,8 +438,8 @@ export default function AdminPage() {
   const updateAttachment = (i: number, field: keyof Attachment, v: string) => setFormData(prev => ({ ...prev, attachments: prev.attachments.map((a, idx) => idx === i ? { ...a, [field]: v } : a) }))
   const removeAttachment = (i: number) => setFormData(prev => ({ ...prev, attachments: prev.attachments.filter((_, idx) => idx !== i) }))
 
-  if (loading || authorized === null || !isDataLoaded) return <Loader fullscreen color="text-orange-500" />
-  if (!user) return null
+  if (loading && authorized === null) return <Loader fullscreen color="text-orange-500" />
+  if (authorized === false) return null
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -660,7 +663,13 @@ export default function AdminPage() {
                     )
                   })()}
                 </div>
-                {filteredChallenges.length === 0 ? (
+                {!isDataLoaded && challenges.length === 0 ? (
+                  <div className="space-y-3 p-4">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="h-14 rounded-xl bg-gray-100 dark:bg-gray-800/60 animate-pulse border border-gray-200 dark:border-gray-700/60" />
+                    ))}
+                  </div>
+                ) : filteredChallenges.length === 0 ? (
                   <motion.div
                     className="text-center py-8 text-gray-500"
                     initial={{ opacity: 0, y: 10 }}

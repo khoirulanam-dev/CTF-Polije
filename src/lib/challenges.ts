@@ -16,102 +16,153 @@ import { Challenge, ChallengeWithSolve, LeaderboardEntry, Attachment, Announceme
 import { validateAttachments } from './safe-url'
 import { parseChallengeHints } from './hints'
 
+// In-memory cache untuk challenges
+const challengesCache = new Map<string, { data: (ChallengeWithSolve & { has_first_blood: boolean; is_new: boolean })[]; timestamp: number }>()
+const challengesInFlight = new Map<string, Promise<(ChallengeWithSolve & { has_first_blood: boolean; is_new: boolean })[]>>()
+const CHALLENGES_CACHE_TTL = 30000 // 30 detik TTL
+
+export function invalidateChallengesCache(): void {
+  challengesCache.clear()
+}
+
+export function getCachedChallengesSync(
+  userId?: string,
+  showAll: boolean = false,
+  seasonId?: string
+): (ChallengeWithSolve & { has_first_blood: boolean; is_new: boolean })[] | null {
+  const cacheKey = `${userId || 'anon'}_${showAll ? 'all' : 'active'}_${seasonId || 'none'}`
+  const entry = challengesCache.get(cacheKey)
+  if (entry && Date.now() - entry.timestamp < CHALLENGES_CACHE_TTL) {
+    return entry.data
+  }
+  return null
+}
+
 /**
- * Get all challenges
+ * Get all challenges with in-memory caching and parallel query execution
  */
 export async function getChallenges(
   userId?: string,
   showAll: boolean = false,
-  seasonId?: string
+  seasonId?: string,
+  forceRefresh = false,
+  knownIsAdmin?: boolean
 ): Promise<(ChallengeWithSolve & { has_first_blood: boolean; is_new: boolean })[]> {
-  try {
-    // 🔹 Siapkan query challenge list
-    let query = supabase
-      .from('challenges')
-      .select('*')
-      .order('points', { ascending: true })        // poin terendah dulu
-      .order('total_solves', { ascending: false }); // jika poin sama, paling banyak solves dulu
+  const cacheKey = `${userId || 'anon'}_${showAll ? 'all' : 'active'}_${seasonId || 'none'}`
 
-    if (!showAll) {
-      query = query.eq('is_active', true);
-      if (seasonId) {
-        // Jangan kembalikan soal jika season berstatus draft
-        const { data: sCheck } = await supabase
-          .from('seasons')
-          .select('status')
-          .eq('id', seasonId)
-          .maybeSingle();
-
-        if (sCheck && sCheck.status === 'draft') {
-          return [];
-        }
-
-        query = query.eq('season_id', seasonId);
-      }
-    } else if (seasonId && seasonId !== 'all') {
-      if (seasonId === 'unassigned') {
-        query = query.is('season_id', null);
-      } else {
-        query = query.eq('season_id', seasonId);
-      }
-    }
-
-    // 🔹 Siapkan query solved user jika ada userId
-    const solvesQuery = userId
-      ? supabase.from('solves').select('challenge_id').eq('user_id', userId)
-      : null;
-
-    // 🔹 Jalankan kedua query secara paralel (menghilangkan network waterfall)
-    const [challengesResult, solvesResult] = await Promise.all([
-      query,
-      solvesQuery,
-    ]);
-
-    if (challengesResult.error) throw new Error(challengesResult.error.message);
-    const challenges = challengesResult.data;
-    if (!challenges) return [];
-
-    const solvedIds = new Set<string>(solvesResult?.data?.map((s) => s.challenge_id) || []);
-
-    const now = Date.now();
-    const oneDayMs = 24 * 60 * 60 * 1000;
-    const userIsAdmin = showAll ? true : await isAdmin();
-
-    return challenges.map(ch => {
-      const createdAt = new Date(ch.created_at);
-      const isRecentlyCreated = (now - createdAt.getTime()) < oneDayMs;
-      // First blood sudah terjadi jika total_solves > 0
-      const hasFirstBlood = (ch.total_solves || 0) > 0;
-
-      // Normalize and mask hints
-      let sanitizedHint: any = null;
-      if (ch.hint) {
-        const parsed = parseChallengeHints(ch.hint, ch.points);
-        if (userIsAdmin) {
-          sanitizedHint = parsed;
-        } else {
-          sanitizedHint = parsed.map(h => ({
-            cost: h.cost,
-            // Free hints (cost === 0) keep their content, paid hints are masked until unlocked
-            content: h.cost === 0 ? h.content : '',
-          }));
-        }
-      }
-
-      return {
-        ...ch,
-        hint: sanitizedHint,
-        is_solved: solvedIds.has(ch.id),
-        has_first_blood: hasFirstBlood,
-        is_recently_created: isRecentlyCreated,
-        is_new: isRecentlyCreated || !hasFirstBlood,
-        total_solves: ch.total_solves || 0,
-      };
-    });
-  } catch (err) {
-    console.error('Error fetching challenges:', err);
-    return [];
+  // Fast path: kembalikan data dari in-memory cache (0ms instant!)
+  if (!forceRefresh) {
+    const cached = getCachedChallengesSync(userId, showAll, seasonId)
+    if (cached) return cached
   }
+
+  // Deduplikasi jika request sedang berjalan
+  const existingFlight = challengesInFlight.get(cacheKey)
+  if (existingFlight) {
+    return existingFlight
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      // 🔹 Siapkan query challenge list
+      let query = supabase
+        .from('challenges')
+        .select('*')
+        .order('points', { ascending: true })        // poin terendah dulu
+        .order('total_solves', { ascending: false }); // jika poin sama, paling banyak solves dulu
+
+      let seasonCheckPromise: Promise<{ data: { status: string } | null } | null> | null = null
+
+      if (!showAll) {
+        query = query.eq('is_active', true);
+        if (seasonId) {
+          seasonCheckPromise = supabase
+            .from('seasons')
+            .select('status')
+            .eq('id', seasonId)
+            .maybeSingle() as any
+
+          query = query.eq('season_id', seasonId);
+        }
+      } else if (seasonId && seasonId !== 'all') {
+        if (seasonId === 'unassigned') {
+          query = query.is('season_id', null);
+        } else {
+          query = query.eq('season_id', seasonId);
+        }
+      }
+
+      // 🔹 Siapkan query solved user jika ada userId
+      const solvesQuery = userId
+        ? supabase.from('solves').select('challenge_id').eq('user_id', userId)
+        : null;
+
+      // 🔹 Siapkan admin check
+      const adminPromise = knownIsAdmin !== undefined ? Promise.resolve(knownIsAdmin) : (showAll ? Promise.resolve(true) : isAdmin());
+
+      // 🔹 Jalankan SEMUA query secara paralel (ZERO network waterfall)
+      const [challengesResult, solvesResult, sCheckResult, userIsAdmin] = await Promise.all([
+        query,
+        solvesQuery,
+        seasonCheckPromise ? seasonCheckPromise : Promise.resolve(null),
+        adminPromise,
+      ]);
+
+      // Jika season berstatus draft dan bukan showAll (admin preview), jangan kembalikan soal
+      if (sCheckResult && (sCheckResult as any).data?.status === 'draft' && !showAll) {
+        return [];
+      }
+
+      if (challengesResult.error) throw new Error(challengesResult.error.message);
+      const challenges = challengesResult.data;
+      if (!challenges) return [];
+
+      const solvedIds = new Set<string>(solvesResult?.data?.map((s) => s.challenge_id) || []);
+
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      const results = challenges.map(ch => {
+        const createdAt = new Date(ch.created_at);
+        const isRecentlyCreated = (now - createdAt.getTime()) < oneDayMs;
+        const hasFirstBlood = (ch.total_solves || 0) > 0;
+
+        let sanitizedHint: any = null;
+        if (ch.hint) {
+          const parsed = parseChallengeHints(ch.hint, ch.points);
+          if (userIsAdmin) {
+            sanitizedHint = parsed;
+          } else {
+            sanitizedHint = parsed.map(h => ({
+              cost: h.cost,
+              content: h.cost === 0 ? h.content : '',
+            }));
+          }
+        }
+
+        return {
+          ...ch,
+          hint: sanitizedHint,
+          is_solved: solvedIds.has(ch.id),
+          has_first_blood: hasFirstBlood,
+          is_recently_created: isRecentlyCreated,
+          is_new: isRecentlyCreated || !hasFirstBlood,
+          total_solves: ch.total_solves || 0,
+        };
+      });
+
+      challengesCache.set(cacheKey, { data: results, timestamp: Date.now() });
+      return results;
+    } catch (err) {
+      console.error('Error fetching challenges:', err);
+      return [];
+    } finally {
+      challengesInFlight.delete(cacheKey);
+    }
+  })();
+
+  challengesInFlight.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**
@@ -167,6 +218,10 @@ export async function submitFlag(challengeId: string, flag: string) {
   if (error) {
     console.error('submit_flag error', error);
     return { success: false, message: error.message };
+  }
+
+  if (data && (data as any).success) {
+    invalidateChallengesCache();
   }
 
   return data;
@@ -253,6 +308,7 @@ export async function addChallenge(challengeData: {
         }
       }
     }
+    invalidateChallengesCache();
   } catch (error) {
     console.error('Error adding challenge:', error)
     throw error
@@ -331,6 +387,7 @@ export async function updateChallenge(challengeId: string, challengeData: {
         console.warn('Could not update challenge season via API:', apiErr)
       }
     }
+    invalidateChallengesCache();
   } catch (error) {
     console.error('Error updating challenge:', error)
     throw error
@@ -348,6 +405,7 @@ export async function deleteChallenge(challengeId: string): Promise<void> {
     if (error) {
       throw new Error(error.message)
     }
+    invalidateChallengesCache();
   } catch (error) {
     console.error('Error deleting challenge:', error)
     throw error
