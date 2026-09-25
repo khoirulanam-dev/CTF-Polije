@@ -10,6 +10,7 @@ import { isValidUsername } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import Loader from "@/components/custom/loading";
 import GoogleLoginButton from "@/components/GoogleLoginButton";
+import GithubLoginButton from "@/components/GithubLoginButton";
 import { useReducedMotion } from "@/contexts/ReducedMotionContext";
 import ReducedMotionToggle from "@/components/ReducedMotionToggle";
 import { validatePassword } from "@/lib/password";
@@ -349,7 +350,10 @@ export default function RegisterPage() {
                 <span className="pointer-events-none absolute inset-0 bg-white/0 transition group-hover:bg-white/5" />
               </motion.button>
 
-              <GoogleLoginButton />
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <GoogleLoginButton />
+                <GithubLoginButton />
+              </div>
             </form>
           </motion.div>
 

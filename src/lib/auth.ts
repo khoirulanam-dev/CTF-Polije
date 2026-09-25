@@ -57,6 +57,28 @@ export async function loginGoogleWithIdToken(
 }
 
 /**
+ * Sign in with GitHub OAuth
+ */
+export async function loginGithub(): Promise<AuthResponse> {
+  try {
+    const redirectUrl = `${window.location.origin}/challenges`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
+
+    if (error) {
+      return { user: null, error: error.message };
+    }
+    return { user: null, error: null };
+  } catch (error) {
+    return { user: null, error: "GitHub sign-in failed" };
+  }
+}
+
+/**
  * Send password reset email
  */
 export async function sendPasswordReset(
