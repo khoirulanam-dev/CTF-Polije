@@ -9,7 +9,7 @@ export interface AuthResponse {
 }
 
 /**
- * Sign in with Google OAuth
+ * Sign in with Google OAuth (Redirect method)
  */
 export async function loginGoogle(): Promise<AuthResponse> {
   try {
@@ -27,6 +27,32 @@ export async function loginGoogle(): Promise<AuthResponse> {
     return { user: null, error: null };
   } catch (error) {
     return { user: null, error: "Google sign-in failed" };
+  }
+}
+
+/**
+ * Sign in with Google ID Token (Google Identity Services - Murni Domain ctfpolije.my.id tanpa redirect supabase)
+ */
+export async function loginGoogleWithIdToken(
+  idToken: string
+): Promise<AuthResponse> {
+  try {
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: "google",
+      token: idToken,
+    });
+
+    if (error) {
+      return { user: null, error: error.message };
+    }
+
+    if (!data.user) {
+      return { user: null, error: "Google sign-in did not return user" };
+    }
+
+    return { user: data.user as any, error: null };
+  } catch (error: any) {
+    return { user: null, error: error?.message || "Google sign-in failed" };
   }
 }
 
