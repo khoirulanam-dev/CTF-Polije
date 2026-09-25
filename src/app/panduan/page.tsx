@@ -135,11 +135,31 @@ export default function PanduanPage() {
           </div>
 
           <div className="relative w-full h-[750px] bg-slate-950">
-            <iframe
-              src="/panduan-ctf-polije.pdf#toolbar=1"
+            <object
+              data="/panduan-ctf-polije.pdf#toolbar=1"
+              type="application/pdf"
               className="w-full h-full border-0"
-              title="Buku Panduan CTF Polije"
-            />
+            >
+              <iframe
+                src="/panduan-ctf-polije.pdf#toolbar=1"
+                className="w-full h-full border-0"
+                title="Buku Panduan CTF Polije"
+              >
+                <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-4">
+                  <p className="text-slate-300 text-sm">
+                    Browser Anda tidak mendukung preview PDF langsung di dalam halaman.
+                  </p>
+                  <a
+                    href="/panduan-ctf-polije.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold text-xs hover:bg-blue-500 transition"
+                  >
+                    Buka PDF di Tab Baru ↗
+                  </a>
+                </div>
+              </iframe>
+            </object>
           </div>
         </div>
       </main>
