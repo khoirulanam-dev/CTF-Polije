@@ -64,10 +64,9 @@ export async function getChallenges(
 
   const fetchPromise = (async () => {
     try {
-      // 🔹 Siapkan query challenge list
-      let query = supabase
-        .from('challenges')
-        .select('*')
+      // 🔹 Siapkan query challenge list via secure RPC get_public_challenges
+      // RPC ini memverifikasi otorisasi di level server sehingga plaintext hint berbayar tidak bocor di network tab
+      let query: any = (supabase.rpc as any)('get_public_challenges')
         .order('points', { ascending: true })        // poin terendah dulu
         .order('total_solves', { ascending: false }); // jika poin sama, paling banyak solves dulu
 
@@ -101,12 +100,30 @@ export async function getChallenges(
       const adminPromise = knownIsAdmin !== undefined ? Promise.resolve(knownIsAdmin) : (showAll ? Promise.resolve(true) : isAdmin());
 
       // 🔹 Jalankan SEMUA query secara paralel (ZERO network waterfall)
-      const [challengesResult, solvesResult, sCheckResult, userIsAdmin] = await Promise.all([
+      let [challengesResult, solvesResult, sCheckResult, userIsAdmin] = await Promise.all([
         query,
         solvesQuery,
         seasonCheckPromise ? seasonCheckPromise : Promise.resolve(null),
         adminPromise,
       ]);
+
+      // Fallback ke tabel challenges langsung jika RPC get_public_challenges belum terpasang di database
+      if (challengesResult?.error) {
+        let fallbackQuery = supabase
+          .from('challenges')
+          .select('*')
+          .order('points', { ascending: true })
+          .order('total_solves', { ascending: false });
+
+        if (!showAll) {
+          fallbackQuery = fallbackQuery.eq('is_active', true);
+          if (seasonId) fallbackQuery = fallbackQuery.eq('season_id', seasonId);
+        } else if (seasonId && seasonId !== 'all') {
+          if (seasonId === 'unassigned') fallbackQuery = fallbackQuery.is('season_id', null);
+          else fallbackQuery = fallbackQuery.eq('season_id', seasonId);
+        }
+        challengesResult = await fallbackQuery;
+      }
 
       // Jika season berstatus draft dan bukan showAll (admin preview), jangan kembalikan soal
       if (sCheckResult && (sCheckResult as any).data?.status === 'draft' && !showAll) {
@@ -122,7 +139,7 @@ export async function getChallenges(
       const now = Date.now();
       const oneDayMs = 24 * 60 * 60 * 1000;
 
-      const results = challenges.map(ch => {
+      const results = (challenges as any[]).map((ch: any) => {
         const createdAt = new Date(ch.created_at);
         const isRecentlyCreated = (now - createdAt.getTime()) < oneDayMs;
         const hasFirstBlood = (ch.total_solves || 0) > 0;

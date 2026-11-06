@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import ImageWithFallback from "@/components/ImageWithFallback";
+import { normalizeExternalHttpsUrl } from "@/lib/safe-url";
 
 type Msg = ChatMessage;
 
@@ -1613,41 +1614,45 @@ export default function LiveChatWidget() {
                             </div>
                           )}
 
-                          {m.attachment_url && (
-                            <div className="mt-2">
-                              {m.attachment_type === "image" ? (
-                                <img
-                                  src={m.attachment_url}
-                                  alt={m.attachment_name || "image"}
-                                  className="max-h-60 rounded-xl border border-white/10 object-contain"
-                                />
-                              ) : m.attachment_type === "pdf" ? (
-                                <a
-                                  href={m.attachment_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                >
-                                  📄 {m.attachment_name || "file.pdf"}
-                                </a>
-                              ) : m.attachment_type === "audio" ? (
-                                <audio
-                                  controls
-                                  src={m.attachment_url}
-                                  className="w-full"
-                                />
-                              ) : (
-                                <a
-                                  href={m.attachment_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                >
-                                  📎 {m.attachment_name || "file"}
-                                </a>
-                              )}
-                            </div>
-                          )}
+                          {(() => {
+                            const safeAttachmentUrl = m.attachment_url ? normalizeExternalHttpsUrl(m.attachment_url) : '';
+                            if (!safeAttachmentUrl) return null;
+                            return (
+                              <div className="mt-2">
+                                {m.attachment_type === "image" ? (
+                                  <img
+                                    src={safeAttachmentUrl}
+                                    alt={m.attachment_name || "image"}
+                                    className="max-h-60 rounded-xl border border-white/10 object-contain"
+                                  />
+                                ) : m.attachment_type === "pdf" ? (
+                                  <a
+                                    href={safeAttachmentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
+                                  >
+                                    📄 {m.attachment_name || "file.pdf"}
+                                  </a>
+                                ) : m.attachment_type === "audio" ? (
+                                  <audio
+                                    controls
+                                    src={safeAttachmentUrl}
+                                    className="w-full"
+                                  />
+                                ) : (
+                                  <a
+                                    href={safeAttachmentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
+                                  >
+                                    📎 {m.attachment_name || "file"}
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </>
                       )}
 
