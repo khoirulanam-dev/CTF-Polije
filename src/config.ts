@@ -16,6 +16,7 @@ export const APP = {
     'Blockchain',
     'Binary Exploitation',
     'Boot2-Root',
+    'Bug Bounty',
   ],
   links: {
     github: 'https://github.com/khoirulanam-dev/CTF-Polije',
