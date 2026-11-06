@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +22,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
+  const [turnstileKey, setTurnstileKey] = useState(0);
+  const captchaTokenRef = useRef(captchaToken);
+  captchaTokenRef.current = captchaToken;
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -32,25 +35,52 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!captchaToken) {
-      setError("Silakan selesaikan CAPTCHA terlebih dahulu.");
-      return;
+
+    let token = captchaTokenRef.current;
+    if (!token) {
+      // Tunggu sebentar (maksimal 1.5 detik) jika verifikasi background Turnstile masih berjalan
+      setLoading(true);
+      token = await new Promise<string>((resolve) => {
+        let attempts = 0;
+        const interval = setInterval(() => {
+          attempts++;
+          if (captchaTokenRef.current) {
+            clearInterval(interval);
+            resolve(captchaTokenRef.current);
+          } else if (attempts >= 15) {
+            clearInterval(interval);
+            resolve("");
+          }
+        }, 100);
+      });
+
+      if (!token) {
+        setLoading(false);
+        setError("Verifikasi keamanan sedang diproses. Silakan klik Sign In sekali lagi.");
+        return;
+      }
     }
+
     setLoading(true);
     try {
       const { user, error } = await signIn(
         formData.identifier,
         formData.password,
-        captchaToken,
+        token,
       );
       if (error) {
         setError(error);
+        // Reset captcha token untuk percobaan berikutnya
+        setCaptchaToken("");
+        setTurnstileKey((prev) => prev + 1);
       } else if (user) {
         setUser(user);
         router.push("/challenges");
       }
     } catch {
       setError("Login failed");
+      setCaptchaToken("");
+      setTurnstileKey((prev) => prev + 1);
     } finally {
       setLoading(false);
     }
@@ -176,6 +206,9 @@ export default function LoginPage() {
               </div>
 
               <TurnstileWidget
+                key={turnstileKey}
+                appearance="interaction-only"
+                action="login"
                 onVerify={setCaptchaToken}
                 onExpire={() => setCaptchaToken("")}
                 onError={() => setCaptchaToken("")}

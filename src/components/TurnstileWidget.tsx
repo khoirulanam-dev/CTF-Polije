@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 declare global {
   interface Window {
@@ -10,9 +10,13 @@ declare global {
         options: {
           sitekey: string;
           theme?: "light" | "dark" | "auto";
+          action?: string;
+          appearance?: "always" | "execute" | "interaction-only";
           callback?: (token: string) => void;
           "expired-callback"?: () => void;
-          "error-callback"?: () => void;
+          "error-callback"?: (errorCode?: string) => void;
+          "before-interactive-callback"?: () => void;
+          "after-interactive-callback"?: () => void;
         },
       ) => string | number;
       reset: (widgetId: string | number) => void;
@@ -24,6 +28,7 @@ declare global {
 let scriptPromise: Promise<void> | null = null;
 
 function loadTurnstileScript() {
+  if (typeof window === "undefined") return Promise.resolve();
   if (window.turnstile) return Promise.resolve();
   if (scriptPromise) return scriptPromise;
 
@@ -52,15 +57,22 @@ type TurnstileWidgetProps = {
   onVerify: (token: string) => void;
   onExpire?: () => void;
   onError?: () => void;
+  appearance?: "always" | "execute" | "interaction-only";
+  action?: string;
+  className?: string;
 };
 
 export default function TurnstileWidget({
   onVerify,
   onExpire,
   onError,
+  appearance = "interaction-only",
+  action = "login",
+  className = "",
 }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | number | null>(null);
+  const [isInteractive, setIsInteractive] = useState(appearance === "always");
   const onVerifyRef = useRef(onVerify);
   const onExpireRef = useRef(onExpire);
   const onErrorRef = useRef(onError);
@@ -78,12 +90,37 @@ export default function TurnstileWidget({
     loadTurnstileScript()
       .then(() => {
         if (cancelled || !containerRef.current || !window.turnstile) return;
+
+        // Bersihkan widget lama jika ada
+        if (widgetIdRef.current !== null && window.turnstile.remove) {
+          try {
+            window.turnstile.remove(widgetIdRef.current);
+          } catch {
+            // abaikan jika sudah di-remove
+          }
+          widgetIdRef.current = null;
+        }
+
         widgetIdRef.current = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
           theme: "dark",
-          callback: (token) => onVerifyRef.current(token),
-          "expired-callback": () => onExpireRef.current?.(),
-          "error-callback": () => onErrorRef.current?.(),
+          appearance,
+          action,
+          callback: (token) => {
+            onVerifyRef.current(token);
+          },
+          "expired-callback": () => {
+            onExpireRef.current?.();
+          },
+          "error-callback": () => {
+            onErrorRef.current?.();
+          },
+          "before-interactive-callback": () => {
+            setIsInteractive(true);
+          },
+          "after-interactive-callback": () => {
+            setIsInteractive(false);
+          },
         });
       })
       .catch(() => onErrorRef.current?.());
@@ -91,11 +128,15 @@ export default function TurnstileWidget({
     return () => {
       cancelled = true;
       if (widgetIdRef.current !== null && window.turnstile?.remove) {
-        window.turnstile.remove(widgetIdRef.current);
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // ignore
+        }
       }
       widgetIdRef.current = null;
     };
-  }, [siteKey]);
+  }, [siteKey, appearance, action]);
 
   if (!siteKey) {
     return (
@@ -105,5 +146,21 @@ export default function TurnstileWidget({
     );
   }
 
-  return <div ref={containerRef} className="flex min-h-[65px] justify-center" />;
+  return (
+    <div className={`transition-all duration-300 ${isInteractive ? "my-3" : "my-0"} ${className}`}>
+      {isInteractive && (
+        <p className="mb-2 text-center text-xs text-amber-300/90 font-medium">
+          🛡️ Verifikasi keamanan diperlukan untuk melanjutkan:
+        </p>
+      )}
+      <div
+        ref={containerRef}
+        className={`flex justify-center transition-all duration-300 ${
+          isInteractive
+            ? "min-h-[65px] opacity-100"
+            : "h-0 min-h-0 overflow-hidden opacity-0 pointer-events-none"
+        }`}
+      />
+    </div>
+  );
 }
